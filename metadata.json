@@ -1,0 +1,6 @@
+{
+  "name": "오늘의 배달 앱 통합 할인 나침반",
+  "description": "스마트폰 화면에 최적화된 배달 4사(배민, 쿠팡이츠, 요기요, 땡겨요) 통합 할인 정보 모음 및 비공개 관리자 등록 시스템",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
