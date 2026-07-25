@@ -1,30 +1,88 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>오늘의 배달 할인 나침반 | 배민, 쿠팡이츠, 요기요, 땡겨요</title>
-    <!-- Pretendard Font for Toss-like clean UI -->
-    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-    <style>
-      body {
-        font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-        background-color: #F8FAFC;
-        -webkit-tap-highlight-color: transparent;
-      }
-      /* Custom scrollbar hide for mobile tabs */
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-    </style>
-  </head>
-  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-600">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>오늘의 배달 앱 통합 할인 나침반 - 배달세일</title>
+    <script src="https://tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
 
+    <!-- 상단 헤더 -->
+    <header class="bg-white shadow-sm sticky top-0 z-50 px-4 py-3 flex justify-between items-center">
+        <h1 class="text-xl font-bold text-orange-500 flex items-center gap-1">🧭 배달세일</h1>
+        <div id="location" class="text-sm bg-gray-100 px-3 py-1.5 rounded-full font-medium text-gray-700">📍 위치 설정 중...</div>
+    </header>
+
+    <!-- 메인 컨텐츠 -->
+    <main class="max-w-md mx-auto p-4 space-y-6 pb-24">
+        <!-- 상단 배너 광고 영역 -->
+        <div class="bg-gray-200 h-20 rounded-lg flex items-center justify-between px-4 text-xs text-gray-500 shadow-inner">
+            <span>ADVERTISE BANNER AREA</span>
+            <button class="bg-white text-gray-700 px-2 py-1 rounded shadow-sm">홈 화면에 추가</button>
+        </div>
+
+        <!-- 타이틀 -->
+        <div>
+            <h2 class="text-lg font-bold">오늘만 역대급 할인 TOP 3</h2>
+            <p class="text-xs text-gray-400 mt-0.5">※ 실시간 배달비 무료 및 결제 조건 자동 반영</p>
+        </div>
+
+        <!-- 🌟 실시간 할인 카드 리스트가 꽂히는 공간 -->
+        <div id="discount-container" class="space-y-3">
+            <p class="text-center text-gray-400 py-10 text-sm">실시간 배달 할인을 불러오는 중입니다...</p>
+        </div>
+    </main>
+
+    <!-- 💡 실시간 데이터 주머니를 열어서 화면을 자동으로 그리는 마법 스크립트 -->
+    <script>
+        // 1. 임시 주소 인식 (GPS 대신 논산시 내동 고정 설정)
+        document.getElementById('location').innerText = "📍 논산시 내동 주변";
+
+        // 2. 로봇이 긁어온 진짜 데이터 파일(discounts.json) 읽어오기
+        fetch('discounts.json')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('discount-container');
+                container.innerHTML = ''; // 기존 6개 가짜 데이터 삭제
+
+                if (data.length === 0) {
+                    container.innerHTML = '<p class="text-center text-gray-400 py-10 text-sm">현재 진행 중인 동네 할인이 없습니다.</p>';
+                    return;
+                }
+
+                // 3. 진짜 데이터를 하나씩 카드로 만들어서 화면에 꽂아주기
+                data.forEach((item, index) => {
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:border-orange-200 transition-all";
+                    
+                    // 배달앱별 시그니처 색상 태그 설정
+                    let badgeColor = "bg-orange-100 text-orange-600";
+                    if(item.platform === "쿠팡") badgeColor = "bg-blue-100 text-blue-600";
+                    if(item.platform === "요기요") badgeColor = "bg-pink-100 text-pink-600";
+
+                    card.innerHTML = `
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold px-2 py-0.5 rounded ${badgeColor}">${item.platform}</span>
+                                <span class="text-xs text-gray-400">#${item.category}</span>
+                            </div>
+                            <h3 class="font-bold text-base text-gray-800">${item.brand}</h3>
+                            <p class="text-xl font-extrabold text-red-500">${item.discount}</p>
+                            <p class="text-xs text-gray-400">${item.condition}</p>
+                        </div>
+                        <div class="flex flex-col items-end gap-2">
+                            <button onclick="alert('알림이 설정되었습니다!')" class="text-xs text-gray-400 hover:text-orange-500">🔔 알림</button>
+                            <a href="${item.link}" target="_blank" class="bg-orange-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-sm hover:bg-orange-600 transition-all">앱으로 이동</a>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            })
+            .catch(error => {
+                console.error("데이터 로드 실패:", error);
+                document.getElementById('discount-container').innerHTML = '<p class="text-center text-red-400 py-10 text-sm">할인 정보를 업데이트하는 중입니다. 잠시 후 새로고침 해주세요.</p>';
+            });
+    </script>
+</body>
+</html>
