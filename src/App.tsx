@@ -287,6 +287,47 @@ export default function App() {
     return INITIAL_DISCOUNTS;
   });
 
+  // Realtime Live Data Fetching State
+  const [isRefreshingLive, setIsRefreshingLive] = useState(false);
+  const [lastUpdatedTime, setLastUpdatedTime] = useState<string | null>(null);
+
+  // Fetch Live Updated Discounts JSON from Server/GitHub
+  const fetchLiveDiscounts = async (silent = false) => {
+    try {
+      if (!silent) setIsRefreshingLive(true);
+      const res = await fetch(`/discounts.json?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setDiscounts(data);
+          try {
+            localStorage.setItem('delivery_compass_discounts_v1', JSON.stringify(data));
+          } catch (e) {
+            console.error(e);
+          }
+          const nowStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+          setLastUpdatedTime(nowStr);
+          if (!silent) {
+            showToast(`🔄 실시간 배달 핫딜 데이터 ${data.length}건 연동 완료! (${nowStr})`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch live discounts.json:', err);
+    } finally {
+      setIsRefreshingLive(false);
+    }
+  };
+
+  // Auto-sync live discounts on mount and every 3 minutes
+  useEffect(() => {
+    fetchLiveDiscounts(true);
+    const interval = setInterval(() => {
+      fetchLiveDiscounts(true);
+    }, 180000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Active filter states
   const [selectedApp, setSelectedApp] = useState<DeliveryApp>('전체');
   const [searchQuery, setSearchQuery] = useState('');
@@ -898,11 +939,18 @@ export default function App() {
             </h1>
           </div>
 
-          <div className="text-right">
-            <div className="text-[11px] text-slate-400 font-medium">오늘 기준</div>
-            <div className="text-xs font-bold text-slate-700 flex items-center justify-end space-x-1">
-              <Clock className="w-3 h-3 text-slate-400" />
-              <span>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}</span>
+          <div className="text-right flex flex-col items-end space-y-1">
+            <button
+              onClick={() => fetchLiveDiscounts(false)}
+              disabled={isRefreshingLive}
+              className="text-[10px] font-extrabold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200/80 flex items-center space-x-1 transition-all active:scale-95 shadow-2xs"
+            >
+              <RefreshCw className={`w-3 h-3 text-blue-600 ${isRefreshingLive ? 'animate-spin' : ''}`} />
+              <span>{isRefreshingLive ? '동기화 중...' : '실시간 연동'}</span>
+            </button>
+            <div className="text-[10px] text-slate-400 font-medium flex items-center space-x-1">
+              <Clock className="w-2.5 h-2.5 text-slate-400" />
+              <span>{lastUpdatedTime ? `최신 갱신: ${lastUpdatedTime}` : new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}</span>
             </div>
           </div>
         </div>
