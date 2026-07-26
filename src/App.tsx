@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { DeliveryAppRollingBanner } from './components/DeliveryAppRollingBanner';
 import {
   Compass,
   Search,
@@ -1111,9 +1112,16 @@ export default function App() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 px-4 py-4 space-y-3 overflow-y-auto">
+        {/* [TOP DELIVERY APP ROLLING BANNER & ACCORDION / TAB DRAWER] */}
+        <DeliveryAppRollingBanner
+          selectedAppFilter={selectedApp !== '전체' ? selectedApp : undefined}
+          onSelectAppFilter={(appId) => {
+            setSelectedApp(appId as DeliveryApp);
+          }}
+        />
+
         {/* [TOP AD BANNER AREA - Google AdSense / Kakao AdFit] */}
-        <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-3 text-center min-h-[90px] flex flex-col items-center justify-center text-slate-400 text-xs">
-          {/* <!-- Google AdSense / Kakao AdFit Header Banner Code Here --> */}
+        <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-2.5 text-center flex flex-col items-center justify-center text-slate-400 text-xs">
           <p className="font-bold text-[11px] text-slate-400">📢 ADVERTISE BANNER AREA (상단 광고 배너)</p>
           <p className="text-[10px] text-slate-300">구글 애드센스 / 카카오 애드핏 디스플레이 광고 코드 영역</p>
         </div>

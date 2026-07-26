@@ -122,15 +122,28 @@ def process_with_gemini(raw_text):
 {raw_text}
 """
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    response = None
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2,
+                )
             )
-        )
+            if response and response.text:
+                break
+        except Exception as err:
+            print(f"모델 {model_name} 호출 실패, 다음 모델로 시도합니다: {err}")
+
+    if not response or not response.text:
+        print("Gemini API 모든 모델 호출 실패")
+        return None
+
+    try:
         data = json.loads(response.text)
         
         # timestamp 및 어필리에이트 제휴 링크 보정
@@ -188,14 +201,26 @@ def generate_blog_post_with_gemini(refined_data):
 {json.dumps(refined_data, ensure_ascii=False, indent=2)}
 """
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.7,
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    response = None
+    for model_name in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                )
             )
-        )
+            if response and response.text:
+                break
+        except Exception as err:
+            print(f"블로그 마케팅 모델 {model_name} 호출 실패: {err}")
+
+    if not response or not response.text:
+        return None, None
+
+    try:
         blog_content = response.text
         blog_title = f"[오늘의 배달 할인] {today_str} 우리 동네 배달앱 혜택/무료배달 총정리"
         return blog_title, blog_content
@@ -276,6 +301,65 @@ def evaluate_notification_triggers(refined_data):
 
     return notifications
 
+def generate_seo_files(site_url, refined_data):
+    """
+    검색엔진(구글, 네이버, 다음)이 자동으로 내 사이트의 최신 배달 할인 정보를 긁어가도록
+    robots.txt, sitemap.xml, rss.xml 을 자동 생성합니다.
+    """
+    os.makedirs("public", exist_ok=True)
+    
+    # 1. robots.txt 생성
+    robots_txt = f"""User-agent: *
+Allow: /
+Sitemap: {site_url}/sitemap.xml
+"""
+    with open("public/robots.txt", "w", encoding="utf-8") as f:
+        f.write(robots_txt)
+
+    # 2. sitemap.xml 생성
+    now_iso = time.strftime("%Y-%m-%dT%H:%M:%S+09:00", time.localtime())
+    sitemap_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>{site_url}/</loc>
+    <lastmod>{now_iso}</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+"""
+    with open("public/sitemap.xml", "w", encoding="utf-8") as f:
+        f.write(sitemap_xml)
+
+    # 3. rss.xml 자동 피드 생성 (네이버 뷰 / 구글 소식지 / RSS 리더 크롤링용)
+    rss_items = ""
+    for item in refined_data[:10]:
+        brand = item.get("brand", "배달할인")
+        disc = item.get("discount", "혜택")
+        app = item.get("app", "배달앱")
+        rss_items += f"""    <item>
+      <title>[{app}] {brand} - {disc}</title>
+      <link>{site_url}/</link>
+      <description>{app}에서 진행 중인 {brand} {disc} 혜택 정보입니다.</description>
+      <pubDate>{time.strftime("%a, %d %b %Y %H:%M:%S +0900", time.localtime())}</pubDate>
+      <guid>{site_url}/#deal-{item.get("id", "0")}</guid>
+    </item>
+"""
+    rss_xml = f"""<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>오늘의 배달 할인 나침반</title>
+    <link>{site_url}</link>
+    <description>실시간 배민, 쿠팡이츠, 요기요, 땡겨요, 두잇 할인 배달비 0원 정보</description>
+    <language>ko-KR</language>
+{rss_items}  </channel>
+</rss>
+"""
+    with open("public/rss.xml", "w", encoding="utf-8") as f:
+        f.write(rss_xml)
+
+    print("   - SEO 자동 노출용 robots.txt, sitemap.xml, rss.xml 생성 완료!")
+
 def main():
     print("1. 핫딜 배달 정보 수집 및 텍스트 파싱...")
     raw_text = fetch_delivery_deals_text()
@@ -288,6 +372,9 @@ def main():
         with open("public/discounts.json", "w", encoding="utf-8") as f:
             json.dump(refined_data, f, ensure_ascii=False, indent=2)
         print(f"3. 성공! 총 {len(refined_data)}개 핫딜 항목이 public/discounts.json 에 업데이트되었습니다.")
+
+        site_url = os.environ.get("VERCEL_SITE_URL", "https://vercel.app")
+        generate_seo_files(site_url, refined_data)
 
         # 2가지 조건 기반 푸시 알림 평가
         notifs = evaluate_notification_triggers(refined_data)
