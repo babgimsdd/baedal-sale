@@ -10,4 +10,4 @@ jobs:
     steps:
       - name: 버셀 자동화 주소 콕 찌르기
         run: |
-          curl -X GET "https://vercel.app"
+          curl -X GET "https://baedal-sale8.vercel.app"
