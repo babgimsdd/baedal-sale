@@ -3,11 +3,12 @@ name: Delivery Discount & Marketing Blog AI Auto Update
 on:
   schedule:
     - cron: '0 0,3,9,14 * * *'
- workflow_dispatch:
+  workflow_dispatch:
+
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
       - name: 버셀 자동화 주소 콕 찌르기
         run: |
-          curl -X GET "https://baedal-sale9.vercel.app"
+          curl -X GET "https://vercel.app"
