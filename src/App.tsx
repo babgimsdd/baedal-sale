@@ -27,7 +27,8 @@ import {
   Bot,
   Code,
   FileJson,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Bell
 } from 'lucide-react';
 
 // Delivery App Type Definition
@@ -340,13 +341,26 @@ export default function App() {
   const [passwordError, setPasswordError] = useState(false);
   const [showLoginPwdText, setShowLoginPwdText] = useState(false);
 
-  // Stored Admin Password (defaults to '1234')
+  // Stored Admin Password (defaults to '1234') with dual persistence (localStorage + cookie backup)
   const [currentAdminPassword, setCurrentAdminPassword] = useState<string>(() => {
     try {
-      return localStorage.getItem('delivery_compass_admin_pwd') || '1234';
+      const local = localStorage.getItem('delivery_compass_admin_pwd');
+      if (local && local.trim()) return local.trim();
+
+      if (typeof document !== 'undefined') {
+        const match = document.cookie.match(/(?:^|; )delivery_admin_pwd=([^;]*)/);
+        if (match && match[1]) {
+          const decoded = decodeURIComponent(match[1]);
+          if (decoded && decoded.trim()) {
+            localStorage.setItem('delivery_compass_admin_pwd', decoded.trim());
+            return decoded.trim();
+          }
+        }
+      }
     } catch {
-      return '1234';
+      // ignore
     }
+    return '1234';
   });
 
   // Stored Affiliate Tracking URLs (Admin Managed)
@@ -358,7 +372,7 @@ export default function App() {
       // ignore
     }
     return {
-      '쿠팡이츠': 'https://link.coupang.com/a/sample_eats',
+      '쿠팡이츠': 'https://eats.coupang.com',
       '배민': 'https://m.baemin.com',
       '요기요': 'https://www.yogiyo.co.kr',
       '땡겨요': 'https://www.ddangyo.com',
@@ -370,6 +384,22 @@ export default function App() {
     };
   });
   const [showAffiliateModal, setShowAffiliateModal] = useState(false);
+
+  // Favorite Food / Brand Alert State (Saved in LocalStorage)
+  const [favoriteKeywords, setFavoriteKeywords] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('delivery_favorite_keywords');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return ['BBQ', '버거킹', '엽기떡볶이', '치킨'];
+  });
+  const [newKeywordInput, setNewKeywordInput] = useState('');
+  const [showFoodAlertModal, setShowFoodAlertModal] = useState(false);
+  const [enableBrowserNotification, setEnableBrowserNotification] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
+  });
 
   // User Location State (Saved in LocalStorage for 100% free Vercel hosting)
   const [userAddress, setUserAddress] = useState<string>(() => {
@@ -421,10 +451,13 @@ export default function App() {
     );
   };
 
-  // Save admin password to localStorage when updated
+  // Save admin password to both localStorage and cookie when updated
   useEffect(() => {
     try {
       localStorage.setItem('delivery_compass_admin_pwd', currentAdminPassword);
+      if (typeof document !== 'undefined') {
+        document.cookie = `delivery_admin_pwd=${encodeURIComponent(currentAdminPassword)}; path=/; max-age=315360000; SameSite=Lax`;
+      }
     } catch (e) {
       console.error('Failed to save admin password', e);
     }
@@ -521,6 +554,8 @@ export default function App() {
       deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
         if (choiceResult.outcome === 'accepted') {
           showToast('📲 홈 화면에 성공적으로 추가되었습니다!');
+        } else {
+          showToast('💡 브라우저 메뉴[⋮]에서 언제든 [홈 화면에 추가]를 할 수 있습니다.');
         }
         setDeferredPrompt(null);
       });
@@ -623,7 +658,16 @@ export default function App() {
       return;
     }
 
-    setCurrentAdminPassword(changeNewPwd.trim());
+    const newPassword = changeNewPwd.trim();
+    setCurrentAdminPassword(newPassword);
+    try {
+      localStorage.setItem('delivery_compass_admin_pwd', newPassword);
+      if (typeof document !== 'undefined') {
+        document.cookie = `delivery_admin_pwd=${encodeURIComponent(newPassword)}; path=/; max-age=315360000; SameSite=Lax`;
+      }
+    } catch (e) {
+      console.error('Failed to save admin password to storage', e);
+    }
     setShowChangePasswordModal(false);
     setChangeCurrentPwd('');
     setChangeNewPwd('');
@@ -906,19 +950,30 @@ export default function App() {
 
       {/* HEADER SECTION (Toss Style Minimal White Canvas Header) */}
       <header className="bg-white px-5 pt-4 pb-4 border-b border-slate-100 sticky top-0 z-30 shadow-xs">
-        {/* Top Quick Actions Bar (홈화면에 추가, 공유하기 버튼) */}
-        <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100/80">
+        {/* Top Quick Actions Bar (홈화면에 추가, 관심음식 알림, 공유하기 버튼) */}
+        <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-100/80 gap-1.5 overflow-x-auto no-scrollbar">
           <button
             onClick={handleAddToHomeScreen}
-            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold rounded-xl flex items-center space-x-1.5 transition-all active:scale-95 border border-blue-200/60 shadow-2xs"
+            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-bold rounded-xl flex items-center space-x-1 transition-all active:scale-95 border border-blue-200/60 shadow-2xs shrink-0"
           >
             <Smartphone className="w-3.5 h-3.5 text-blue-600" />
-            <span>홈화면에 추가</span>
+            <span>홈화면 추가</span>
+          </button>
+
+          <button
+            onClick={() => setShowFoodAlertModal(true)}
+            className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-xl flex items-center space-x-1 transition-all active:scale-95 border border-amber-200/80 shadow-2xs shrink-0 relative"
+          >
+            <Bell className="w-3.5 h-3.5 text-amber-600" />
+            <span>🔔 관심음식 알림</span>
+            {favoriteKeywords.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 absolute -top-0.5 -right-0.5 animate-pulse"></span>
+            )}
           </button>
 
           <button
             onClick={handleShare}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-bold rounded-xl flex items-center space-x-1.5 transition-all active:scale-95 shadow-2xs"
+            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-bold rounded-xl flex items-center space-x-1 transition-all active:scale-95 shadow-2xs shrink-0"
           >
             <Share2 className="w-3.5 h-3.5 text-slate-600" />
             <span>공유하기</span>
@@ -1242,8 +1297,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Right Action Button with FTC Disclosure */}
-                    <div className="flex flex-col items-end">
+                    {/* Right Action Button */}
+                    <div className="flex flex-col items-end justify-center">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1254,9 +1309,6 @@ export default function App() {
                         <span>앱으로 이동</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
-                      <p className="text-[9px] text-slate-400 mt-1 max-w-[120px] text-right leading-tight">
-                        ※ 이 링크를 통해 주문 시 파트너스 활동의 일환으로 소정의 수수료가 창작자에게 지급됩니다.
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -1418,6 +1470,9 @@ export default function App() {
               <h3 className="text-base font-extrabold text-slate-900">관리자 인증</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 할인 정보 입력을 위해 비밀번호를 입력하세요.
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1 bg-slate-50 py-1 px-2 rounded-lg border border-slate-100">
+                🔒 변경하신 비밀번호는 이 디바이스(브라우저/쿠키)에 영구 저장됩니다.
               </p>
             </div>
 
@@ -1733,7 +1788,7 @@ export default function App() {
                   <Smartphone className="w-4 h-4" />
                 </div>
                 <h3 className="text-base font-extrabold text-slate-900">
-                  홈 화면에 앱 추가하기
+                  📱 홈 화면에 앱 바로 생성하기
                 </h3>
               </div>
               <button
@@ -1744,38 +1799,52 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs text-slate-700 py-1">
-              <p className="text-slate-500 font-medium leading-relaxed">
-                스마트폰 홈 화면에 아이콘을 생성하면 앱처럼 빠르게 접속할 수 있습니다.
+            <div className="space-y-3 text-xs text-slate-700 py-1">
+              {/* In-App Browser Notice */}
+              {typeof navigator !== 'undefined' && /kakaotalk|naver|line|inapp/i.test(navigator.userAgent) && (
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center space-x-1">
+                    <span>⚠️ 인앱 브라우저(카카오톡/네이버) 이용 중 안내:</span>
+                  </p>
+                  <p>
+                    앱 내부 브라우저에서는 홈 화면 추가가 바로 안 될 수 있습니다. 상단 또는 하단 메뉴에서 <strong>[다른 브라우저로 열기 (Chrome 또는 Safari)]</strong>를 선택하신 후 홈 화면에 추가해 주세요!
+                  </p>
+                </div>
+              )}
+
+              <p className="text-slate-600 font-medium leading-relaxed">
+                스마트폰 홈 화면에 아이콘을 생성해 두시면 앱처럼 단 한 번의 터치로 실시간 배달 할인을 확인하실 수 있습니다.
               </p>
 
+              {/* Android Chrome Guide */}
+              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 space-y-1.5">
+                <div className="font-bold text-slate-900 flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-extrabold">
+                      Android
+                    </span>
+                    <span className="text-emerald-950 font-bold">안드로이드 (Chrome)</span>
+                  </div>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-700 text-[11px] pl-1">
+                  <li>브라우저 우측 상단 <strong>'더보기(⋮)'</strong> 메뉴 클릭</li>
+                  <li><strong>'앱 설치'</strong> 또는 <strong>'홈 화면에 추가'</strong> 선택</li>
+                  <li>팝업 창에서 <strong>'추가'</strong> 누르면 바탕화면에 생성!</li>
+                </ol>
+              </div>
+
               {/* iPhone Safari Guide */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1.5">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
                 <div className="font-bold text-slate-900 flex items-center space-x-1.5">
                   <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-[10px] flex items-center justify-center font-extrabold">
                     iOS
                   </span>
-                  <span>아이폰 Safari 사용자</span>
+                  <span>아이폰 (Safari)</span>
                 </div>
                 <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[11px] pl-1">
-                  <li>사파리 하단 중앙의 <strong>'공유(Square + Arrow)'</strong> 버튼 클릭</li>
-                  <li>메뉴 항목 중 <strong>'홈 화면에 추가'</strong> 선택</li>
-                  <li>우측 상단 <strong>'추가'</strong> 버튼 누르면 완벽 등록!</li>
-                </ol>
-              </div>
-
-              {/* Android Chrome Guide */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1.5">
-                <div className="font-bold text-slate-900 flex items-center space-x-1.5">
-                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-extrabold">
-                    Android
-                  </span>
-                  <span>안드로이드 Chrome 사용자</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[11px] pl-1">
-                  <li>크롬 우측 상단 <strong>'더보기(⋮)'</strong> 버튼 클릭</li>
-                  <li><strong>'앱 설치'</strong> 또는 <strong>'홈 화면에 추가'</strong> 선택</li>
-                  <li>팝업 창에서 <strong>'추가'</strong> 선택하면 즉시 설치 완료!</li>
+                  <li>사파리 하단 중앙 <strong>'공유(Square + Arrow)'</strong> 버튼 클릭</li>
+                  <li>메뉴 중 <strong>'홈 화면에 추가'</strong> 선택</li>
+                  <li>우측 상단 <strong>'추가'</strong> 누르면 아이콘 생성 완료!</li>
                 </ol>
               </div>
             </div>
@@ -1784,7 +1853,7 @@ export default function App() {
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(window.location.href);
-                  showToast('🔗 사이트 주소가 복사되었습니다!');
+                  showToast('🔗 사이트 주소가 복사되었습니다! 브라우저 주소창에 붙여넣어 보세요.');
                 }}
                 className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-all text-xs flex items-center justify-center space-x-1"
               >
@@ -1822,7 +1891,7 @@ export default function App() {
                   관리자 비밀번호 변경
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  새 비밀번호로 안전하게 업데이트합니다.
+                  새 비밀번호로 안전하게 업데이트합니다. (브라우저 &amp; 쿠키 영구 저장)
                 </p>
               </div>
             </div>
@@ -2314,15 +2383,27 @@ export default async function handler(req, res) {
             </div>
 
             <div className="space-y-3 mb-4">
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200/80 text-[11px] text-amber-900 space-y-1">
-                <p className="font-bold flex items-center space-x-1">
-                  <span>💡 쿠팡 파트너스 &amp; 수익 제휴 링크 가이드:</span>
+              <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200/80 text-[11px] text-amber-900 space-y-2">
+                <p className="font-bold flex items-center space-x-1 text-xs text-amber-950">
+                  <span>💡 [중요] 쿠팡이츠 링크 설정 안내:</span>
                 </p>
-                <p>
-                  발급받은 <strong>쿠팡 파트너스 추천 링크</strong> 및 각 배달앱 수익 주소를 아래 입력칸에 연결하세요.
-                </p>
-                <p className="text-[10px] text-amber-800/80 mt-1">
-                  * <strong>파이썬 자동화 연동:</strong> <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">update_discounts.py</code> 파일 상단 변수(예: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">COUPANG_EATS_TRACKING_URL</code>)나 깃허브 Secrets에 주소를 입력해 두시면 깃허브 가상 컴퓨터가 크롤링할 때 자동으로 핫딜 데이터에 수익 주소가 매핑됩니다.
+                <div className="bg-white/80 p-2 rounded-lg border border-amber-200 text-[10.5px] leading-relaxed text-amber-950">
+                  <p className="font-bold text-red-600 mb-0.5">⚠️ 쿠팡 파트너스에서 "지원하지 않는 형태" 오류가 나는 이유:</p>
+                  <p className="text-slate-700">
+                    쿠팡 파트너스는 <strong>일반 쿠팡 쇼핑몰(coupang.com)</strong> 전용 시스템이라 <code className="bg-amber-100 px-1 py-0.2 rounded font-mono font-bold">coupangeats.com</code> 주소로는 파트너스 단축 링크가 생성되지 않습니다.
+                  </p>
+                  <p className="font-bold text-blue-700 mt-1 mb-0.5">✅ 쿠팡이츠에 사용할 수 있는 올바른 주소 2가지:</p>
+                  <ul className="list-disc pl-4 text-slate-800 space-y-0.5">
+                    <li>
+                      <strong>쿠팡이츠 공식 연결 주소:</strong> <code className="bg-slate-100 text-blue-700 px-1 font-mono font-bold">https://eats.coupang.com</code>
+                    </li>
+                    <li>
+                      <strong>쿠팡이츠 친구초대/쿠폰 링크:</strong> 쿠팡이츠 앱 [MY &gt; 친구초대]에서 받은 추천 주소 (<code className="bg-slate-100 text-slate-700 px-1 font-mono">https://share.coupangeats.com/...</code>)
+                    </li>
+                  </ul>
+                </div>
+                <p className="text-[10px] text-amber-800/80 border-t border-amber-200/60 pt-1.5">
+                  * <strong>파이썬 자동화 연동:</strong> <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">update_discounts.py</code>의 <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">COUPANG_EATS_TRACKING_URL</code>에 위 주소를 설정하면 자동 적용됩니다.
                 </p>
               </div>
 
@@ -2387,6 +2468,181 @@ export default async function handler(req, res) {
                 className="px-4 py-2.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-200"
               >
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 10: USER FAVORITE FOOD & BRAND ALERT SETTING MODAL */}
+      {showFoodAlertModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+            <button
+              onClick={() => setShowFoodAlertModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2.5 mb-3 pb-3 border-b border-slate-100">
+              <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Bell className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  🔔 관심 음식 / 브랜드 알림 설정
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  좋아하는 음식이나 브랜드 키워드를 등록하면 할인 발생 시 알림을 받습니다!
+                </p>
+              </div>
+            </div>
+
+            {/* Browser Push Permission Status Box */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 mb-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">
+                  🌐 브라우저 / 모바일 푸시 알림
+                </span>
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                  enableBrowserNotification ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {enableBrowserNotification ? '알림 허용됨' : '미허용'}
+                </span>
+              </div>
+              {!enableBrowserNotification && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if ('Notification' in window) {
+                      Notification.requestPermission().then((permission) => {
+                        if (permission === 'granted') {
+                          setEnableBrowserNotification(true);
+                          showToast('🔔 브라우저 알림 권한이 허용되었습니다!');
+                        } else {
+                          showToast('알림 권한이 거부되었습니다. 브라우저 설정에서 변경 가능합니다.');
+                        }
+                      });
+                    } else {
+                      showToast('이 브라우저는 웹 푸시 알림을 지원하지 않습니다.');
+                    }
+                  }}
+                  className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg transition-all"
+                >
+                  푸시 알림 권한 허용하기
+                </button>
+              )}
+            </div>
+
+            {/* Keyword Input Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newKeywordInput.trim();
+                if (!trimmed) return;
+                if (favoriteKeywords.includes(trimmed)) {
+                  showToast(`이미 등록된 키워드입니다: '${trimmed}'`);
+                  return;
+                }
+                const updated = [...favoriteKeywords, trimmed];
+                setFavoriteKeywords(updated);
+                try {
+                  localStorage.setItem('delivery_favorite_keywords', JSON.stringify(updated));
+                } catch (err) {
+                  console.error(err);
+                }
+                setNewKeywordInput('');
+                showToast(`🔔 관심 키워드 '${trimmed}' 추가 완료!`);
+              }}
+              className="space-y-2 mb-4"
+            >
+              <label className="text-xs font-bold text-slate-800 block">
+                + 새 관심 음식 / 브랜드 추가
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={newKeywordInput}
+                  onChange={(e) => setNewKeywordInput(e.target.value)}
+                  placeholder="예: 치킨, BBQ, 엽떡, 피자, 버거"
+                  className="flex-1 px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-900 font-medium"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all shrink-0"
+                >
+                  추가
+                </button>
+              </div>
+            </form>
+
+            {/* Current Registered Keywords Tag Cloud */}
+            <div className="space-y-2 mb-5">
+              <span className="text-xs font-bold text-slate-800 block">
+                📌 내가 저장한 관심 키워드 ({favoriteKeywords.length}개)
+              </span>
+              {favoriteKeywords.length === 0 ? (
+                <p className="text-xs text-slate-400 py-3 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  등록된 관심 키워드가 없습니다. 위에서 추가해 보세요!
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 max-h-36 overflow-y-auto">
+                  {favoriteKeywords.map((kw) => {
+                    const matchCount = discounts.filter((d) => 
+                      d.brand.toLowerCase().includes(kw.toLowerCase()) || 
+                      d.discount.toLowerCase().includes(kw.toLowerCase()) ||
+                      (d.category || '').toLowerCase().includes(kw.toLowerCase())
+                    ).length;
+
+                    return (
+                      <span
+                        key={kw}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 rounded-lg text-xs font-bold shadow-2xs"
+                      >
+                        <span>{kw}</span>
+                        {matchCount > 0 && (
+                          <span className="bg-amber-500 text-slate-950 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                            {matchCount}건 딜
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = favoriteKeywords.filter((k) => k !== kw);
+                            setFavoriteKeywords(updated);
+                            try {
+                              localStorage.setItem('delivery_favorite_keywords', JSON.stringify(updated));
+                            } catch (err) {
+                              console.error(err);
+                            }
+                            showToast(`삭제되었습니다: '${kw}'`);
+                          }}
+                          className="text-slate-400 hover:text-red-500 ml-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.setItem('delivery_favorite_keywords', JSON.stringify(favoriteKeywords));
+                  } catch (e) {
+                    console.error(e);
+                  }
+                  showToast('🔔 관심 알림 키워드가 저장되었습니다!');
+                  setShowFoodAlertModal(false);
+                }}
+                className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-xs"
+              >
+                닫기 및 저장 완료
               </button>
             </div>
           </div>
