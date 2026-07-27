@@ -83,7 +83,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '배민클럽 적용 매장 알뜰배달 무료 배송 (배달팁 0원)',
     subscriptionBenefit: '배민클럽 (프로모션가 월 1,990원 / 첫달 무료 체험, 배달팁 무료 + 브랜드 쿠폰)',
     basicDeliveryTip: '일반배달 1,000원~3,500원 (거리/시간대별 차등)',
-    webUrl: 'https://m.baemin.com/',
+    webUrl: 'https://search.11st.co.kr/Search.tmall?kwd=%EB%B0%B0%EB%8B%AC%EC%9D%98%EB%AF%BC%EC%A1%B1+%EC%83%81%ED%92%88%EA%B6%8C',
     scheme: 'baemin://',
   },
   {
@@ -99,7 +99,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '쿠팡 와우 회원 대상 묶음배달 무료배송 (배달팁 0원)',
     subscriptionBenefit: '쿠팡 와우 멤버십 (월 7,890원 / 로켓배송 + 쿠팡이츠 무제한 무료배송)',
     basicDeliveryTip: '비회원/단건배달 2,000원~4,000원 수준',
-    webUrl: 'https://eats.coupang.com/',
+    webUrl: 'https://www.coupang.com/np/search?q=%EC%BF%A0%ED%8F%B0+%EC%BF%A0%ED%8C%A1%EC%9D%B4%EC%B8%A0',
     scheme: 'coupangeats://',
   },
   {
@@ -115,7 +115,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '요기패스X 구독 시 최소주문금액(15,000원) 이상 무제한 무료배송',
     subscriptionBenefit: '요기패스X (월 2,900원 프로모션 / 가게 쿠폰과 중복 할인 가능)',
     basicDeliveryTip: '일반 주문 시 2,000원~4,000원 (지역별 차등)',
-    webUrl: 'https://www.yogiyo.co.kr/',
+    webUrl: 'https://browse.gmarket.co.kr/search?keyword=%EC%9A%94%EA%B8%B0%EC%9A%94+%EA%B8%88%EC%95%A1%EA%B6%8C',
     scheme: 'yogiyo://',
   },
   {
@@ -131,7 +131,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '가게 자체 무료배송 지원 및 땡겨요 전용 2,000원 배달팁 쿠폰 제공',
     subscriptionBenefit: '월 구독료 0원! (지역사랑상품권 7~15% 할인 구매 결제 가능)',
     basicDeliveryTip: '착한 수수료 기반 평균 1,000원~2,500원 (업계 최저 수준)',
-    webUrl: 'https://www.ddangyo.com/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%9D%A1%EA%B2%A8%EC%9A%94',
     scheme: 'ddangyo://',
   },
   {
@@ -147,7 +147,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '지자체 지원 쿠폰 활용 시 배달팁 최대 3,000원 자동 차감',
     subscriptionBenefit: '구독료 0원! 소상공인 수수료 1.5% 상생 혜택',
     basicDeliveryTip: '1,500원~3,000원 (지역화폐 결제 시 실질 10% 추가 절감)',
-    webUrl: 'https://www.mukkebi.com/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%A9%89%EA%B9%A8%EB%B9%84',
     scheme: 'mukkebi://',
   },
   {
@@ -163,7 +163,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '월별 지자체 배달비 지원 쿠폰 지급 (최대 3,000원 할인)',
     subscriptionBenefit: '구독료 없음 / 경기지역화폐 연결 시 최대 15% 혜택 효과',
     basicDeliveryTip: '1,000원~3,000원 (지자체 상생 요금 적용)',
-    webUrl: 'https://www.specialdelivery.or.kr/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%B0%B0%EB%8B%AC%ED%8A%B9%EA%B8%89',
     scheme: 'specialdelivery://',
   },
   {
@@ -179,7 +179,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '대구시 배달비 지원 이벤트 매월 선착순 제공',
     subscriptionBenefit: '대구 시민 전용 구독료 0원 / 시민 생활 종합 플랫폼',
     basicDeliveryTip: '1,000원~2,500원 수준',
-    webUrl: 'https://daaguro.co.kr/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%8C%80%EA%B5%AC%EB%A1%9C',
     scheme: 'daaguro://',
   },
   {
@@ -195,7 +195,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '7,900원 이상 주문 시 조건 없이 100% 무제한 무료배송',
     subscriptionBenefit: '구독료 0원 / 팀주문 시스템으로 매일 배달비 평생 free',
     basicDeliveryTip: '0원 (모든 주문 기본 무료배송)',
-    webUrl: 'https://doeat.io/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%91%90%EC%9E%87',
     scheme: 'doeat://',
   },
   {
@@ -211,7 +211,7 @@ export const DELIVERY_APP_DETAILS: DeliveryAppInfo[] = [
     freeDeliveryCondition: '부산시 지자체 배달비 지원 혜택',
     subscriptionBenefit: '부산 시민 전용 구독료 0원 공공 배달 서비스',
     basicDeliveryTip: '1,000원~2,500원 수준',
-    webUrl: 'https://www.dongbaegtong.com/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%8F%99%EB%B0%B1%ED%86%B5',
     scheme: 'dongbaegtong://',
   }
 ];

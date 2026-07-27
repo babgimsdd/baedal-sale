@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ChevronLeft,
   Copy,
@@ -13,37 +13,72 @@ import {
   ShoppingBag,
   CreditCard,
   CheckCircle2,
-  AlertCircle
+  RefreshCw,
 } from 'lucide-react';
 import { DiscountItem } from '../App';
+import {
+  isValidProductUrl,
+  isProductActiveAndValid,
+  findActiveReplacementProduct,
+  createReplacedProductData,
+  getProductPurchaseUrl,
+  ProductItem,
+} from '../lib/productValidator';
 
 interface DealDetailPageProps {
   item: DiscountItem;
+  pool?: DiscountItem[];
   onBack: () => void;
   onCopyCoupon: (code: string) => void;
+  onProductReplaced?: (replacedItem: DiscountItem) => void;
 }
 
 export const DealDetailPage: React.FC<DealDetailPageProps> = ({
-  item,
+  item: initialItem,
+  pool = [],
   onBack,
   onCopyCoupon,
+  onProductReplaced,
 }) => {
   const [copied, setCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [currentItem, setCurrentItem] = useState<DiscountItem>(initialItem);
 
-  const title = item.title || item.name || item.brand;
-  const affiliateUrl = item.affiliate_link || item.url || item.link || 'https://www.coupang.com';
-  const imageUrl = item.imageUrl || item.image;
-  const discountRate = item.discountRate;
+  // Auto-validate and replace product if current link is invalid/sold out or main page URL
+  useEffect(() => {
+    let activeItem = initialItem;
+
+    if (!isProductActiveAndValid(activeItem as ProductItem)) {
+      // Find an active replacement in the pool
+      const activeReplacement = findActiveReplacementProduct(activeItem as ProductItem, pool as ProductItem[]);
+      if (activeReplacement) {
+        const replaced = createReplacedProductData(activeItem as ProductItem, activeReplacement) as DiscountItem;
+        activeItem = replaced;
+        setCurrentItem(replaced);
+        if (onProductReplaced) {
+          onProductReplaced(replaced);
+        }
+      }
+    } else {
+      setCurrentItem(initialItem);
+    }
+  }, [initialItem, pool, onProductReplaced]);
+
+  const displayItem = currentItem;
+  const title = displayItem.title || displayItem.name || displayItem.brand;
+  const purchaseUrl = getProductPurchaseUrl(displayItem as ProductItem);
+  const hasValidPurchaseUrl = isValidProductUrl(purchaseUrl);
+  const imageUrl = displayItem.imageUrl || displayItem.image;
+  const discountRate = displayItem.discountRate;
 
   // Dynamic SEO Title, Description, and Open Graph Meta Tag Management
   useEffect(() => {
     const defaultTitle = document.title;
-    const pageTitle = `${title} (${item.discount}) - 초특가 핫딜 | 배달/밀키트 쿠폰`;
+    const pageTitle = `${title} (${displayItem.discount}) - 초특가 핫딜 | 배달/밀키트 쿠폰`;
     document.title = pageTitle;
 
     const metaDesc = document.querySelector('meta[name="description"]');
-    const descContent = `${title} ${item.discount} 할인! ${item.linkNote || '실시간 최저가 쿠폰 및 밀키트 특가 정보'}`;
+    const descContent = `${title} ${displayItem.discount} 할인! ${displayItem.linkNote || '실시간 최저가 쿠폰 및 밀키트 특가 정보'}`;
     if (metaDesc) {
       metaDesc.setAttribute('content', descContent);
     }
@@ -60,19 +95,19 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
 
     updateOgTag('og:title', pageTitle);
     updateOgTag('og:description', descContent);
-    if (item.imageUrl) {
-      updateOgTag('og:image', item.imageUrl);
+    if (displayItem.imageUrl) {
+      updateOgTag('og:image', displayItem.imageUrl);
     }
     updateOgTag('og:type', 'product');
 
     return () => {
       document.title = defaultTitle;
     };
-  }, [title, item]);
+  }, [title, displayItem]);
 
   const handleCopy = () => {
-    if (item.couponCode) {
-      onCopyCoupon(item.couponCode);
+    if (displayItem.couponCode) {
+      onCopyCoupon(displayItem.couponCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -83,7 +118,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
       navigator
         .share({
           title: `[초특가 핫딜] ${title}`,
-          text: `${title} - ${item.discount} 할인 혜택!`,
+          text: `${title} - ${displayItem.discount} 할인 혜택!`,
           url: window.location.href,
         })
         .catch(() => {});
@@ -96,15 +131,15 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
 
   // Category Badge Label
   const categoryLabel =
-    item.category === 'korean'
+    displayItem.category === 'korean'
       ? '한식 밀키트'
-      : item.category === 'chinese'
+      : displayItem.category === 'chinese'
       ? '중식 밀키트'
-      : item.category === 'western'
+      : displayItem.category === 'western'
       ? '양식 밀키트'
-      : item.category === 'coupon' || item.category_type === 'coupon'
+      : displayItem.category === 'coupon' || displayItem.category_type === 'coupon'
       ? '배달/치킨 쿠폰'
-      : item.category || '특가 할인';
+      : displayItem.category || '특가 할인';
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-slate-50 flex flex-col justify-between shadow-2xl relative font-sans border-x border-slate-200/60 pb-24">
@@ -119,9 +154,11 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
         </button>
 
         <div className="flex items-center space-x-2">
-          <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300/60">
-            {item.app}
-          </span>
+          {displayItem.app && (
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300/60">
+              {displayItem.app}
+            </span>
+          )}
           <button
             onClick={handleShare}
             className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-all active:scale-95"
@@ -140,6 +177,19 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
         </div>
       )}
 
+      {/* Replaced Notice Badge */}
+      {displayItem.isReplaced && (
+        <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200/80 rounded-xl flex items-start space-x-2 text-xs text-amber-900">
+          <RefreshCw className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 animate-spin" style={{ animationDuration: '3s' }} />
+          <div>
+            <p className="font-bold">최신 동일 브랜드 특가로 자동 반영되었습니다.</p>
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              원래 선택된 상품이 품절/마감되어 동일 브랜드/카테고리의 실시간 유효한 특가 상품으로 자동 전환되었습니다.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div className="p-4 space-y-4">
         {/* 1. Product Image / Hero Banner */}
@@ -154,7 +204,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 flex flex-col items-center justify-center text-white p-6 text-center">
               <ShoppingBag className="w-12 h-12 mb-2 text-amber-200" />
-              <p className="font-black text-lg">{item.brand}</p>
+              <p className="font-black text-lg">{displayItem.brand}</p>
               <p className="text-xs text-amber-100 mt-1">{categoryLabel}</p>
             </div>
           )}
@@ -164,15 +214,15 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
             <span className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-slate-900/80 text-white backdrop-blur-md shadow-sm">
               {categoryLabel}
             </span>
-            {item.seller && (
+            {displayItem.seller && (
               <span className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-amber-500 text-white shadow-sm">
-                🛒 {item.seller}
+                🛒 {displayItem.seller}
               </span>
             )}
           </div>
 
           {discountRate && (
-            <div className="absolute bottom-3 right-3 bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-xl font-black text-sm sm:text-base shadow-lg animate-pulse flex items-center space-x-1">
+            <div className="absolute bottom-3 right-3 bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-xl font-black text-sm sm:text-base shadow-lg flex items-center space-x-1">
               <Sparkles className="w-4 h-4 text-yellow-300" />
               <span>🔥 {discountRate}% OFF</span>
             </div>
@@ -183,14 +233,14 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
           <div className="flex items-center justify-between text-xs text-slate-500">
             <div className="flex items-center space-x-1.5 font-bold">
-              <span className="text-blue-600 font-extrabold">{item.app}</span>
+              <span className="text-blue-600 font-extrabold">{displayItem.app}</span>
               <span>•</span>
-              <span>{item.region || '전국 혜택'}</span>
+              <span>{displayItem.region || '전국 혜택'}</span>
             </div>
-            {item.validity && (
+            {displayItem.validity && (
               <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md font-semibold border border-amber-200/60 flex items-center space-x-1">
                 <Clock className="w-3 h-3 text-amber-600" />
-                <span>{item.validity}</span>
+                <span>{displayItem.validity}</span>
               </span>
             )}
           </div>
@@ -205,13 +255,13 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
               <p className="text-[11px] font-semibold text-slate-400">특가 적용 가격</p>
               <div className="flex items-baseline space-x-2">
                 <span className="text-xl sm:text-2xl font-black text-red-600">
-                  {item.discountPrice
-                    ? `${item.discountPrice.toLocaleString()}원`
-                    : item.discount}
+                  {displayItem.discountPrice
+                    ? `${displayItem.discountPrice.toLocaleString()}원`
+                    : displayItem.discount}
                 </span>
-                {item.originalPrice && item.originalPrice > (item.discountPrice || 0) && (
+                {displayItem.originalPrice && displayItem.originalPrice > (displayItem.discountPrice || 0) && (
                   <span className="text-xs sm:text-sm text-slate-400 line-through">
-                    {item.originalPrice.toLocaleString()}원
+                    {displayItem.originalPrice.toLocaleString()}원
                   </span>
                 )}
               </div>
@@ -232,19 +282,19 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
               <Tag className="w-4 h-4 text-blue-600" />
               <span>할인 쿠폰코드</span>
             </div>
-            {item.couponCode && (
+            {displayItem.couponCode && (
               <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md">
                 결제 시 입력
               </span>
             )}
           </div>
 
-          {item.couponCode ? (
+          {displayItem.couponCode ? (
             <div className="bg-white p-3 rounded-xl border border-blue-200 flex items-center justify-between shadow-2xs">
               <div className="space-y-0.5">
                 <span className="text-[10px] text-slate-400 font-semibold block">클릭 시 쿠폰 코드 자동 복사</span>
                 <span className="font-mono font-black text-base text-blue-900 tracking-wider">
-                  {item.couponCode}
+                  {displayItem.couponCode}
                 </span>
               </div>
               <button
@@ -275,7 +325,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           )}
         </div>
 
-        {/* 4. Product Description (상품 설명) */}
+        {/* 4. Product Description */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2">
           <h2 className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
             <Info className="w-4 h-4 text-amber-500" />
@@ -283,22 +333,22 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           </h2>
           <div className="text-xs text-slate-700 leading-relaxed space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
             <p className="font-semibold text-slate-900">
-              {item.linkNote || `${item.brand}의 한정 특가 상품입니다.`}
+              {displayItem.linkNote || `${displayItem.brand}의 한정 특가 상품입니다.`}
             </p>
             <p className="text-slate-600">
               본 특가 정보는 실시간 제휴 스토어 및 브랜드관 공식 세일 행사로 제공됩니다.
-              {item.minOrder && ` (${item.minOrder})`}
+              {displayItem.minOrder && ` (${displayItem.minOrder})`}
             </p>
-            {item.card_discount && item.card_discount !== '없음' && (
+            {displayItem.card_discount && displayItem.card_discount !== '없음' && (
               <p className="text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100 flex items-center space-x-1 mt-1">
                 <CreditCard className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span>추가 결제 혜택: {item.card_discount}</span>
+                <span>추가 결제 혜택: {displayItem.card_discount}</span>
               </p>
             )}
           </div>
         </div>
 
-        {/* 5. Usage Instructions (사용방법) */}
+        {/* 5. Usage Instructions */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2.5">
           <h2 className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -332,7 +382,7 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           </ol>
         </div>
 
-        {/* 6. Precautions & Notice (주의사항) */}
+        {/* 6. Precautions & Notice */}
         <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/80 space-y-2 text-xs">
           <h2 className="font-black text-amber-950 flex items-center space-x-1.5">
             <ShieldAlert className="w-4 h-4 text-amber-600" />
@@ -340,10 +390,10 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
           </h2>
           <ul className="text-amber-900/90 text-[11px] space-y-1 list-disc list-inside leading-snug">
             <li>
-              <strong>유효기간:</strong> {item.validity || '오늘 한정 및 수량 소진 시까지'}
+              <strong>유효기간:</strong> {displayItem.validity || '오늘 한정 및 수량 소진 시까지'}
             </li>
             <li>
-              <strong>최소 주문금액:</strong> {item.minOrder || '제한 없음'}
+              <strong>최소 주문금액:</strong> {displayItem.minOrder || '제한 없음'}
             </li>
             <li>
               본 할인 이벤트는 제휴 판매처 및 브랜드 사정에 따라 사전 고지 없이 조기 마감되거나 변경될 수 있습니다.
@@ -357,15 +407,24 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
 
       {/* 7. Bottom Sticky External Purchase CTA Button */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 z-50 shadow-xl">
-        <a
-          href={affiliateUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white font-black text-sm sm:text-base rounded-2xl shadow-md hover:brightness-105 active:scale-98 transition-all flex items-center justify-center space-x-2"
-        >
-          <span>구매하러 가기</span>
-          <ExternalLink className="w-5 h-5" />
-        </a>
+        {hasValidPurchaseUrl && purchaseUrl ? (
+          <a
+            href={purchaseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 text-white font-black text-sm sm:text-base rounded-2xl shadow-md hover:brightness-105 active:scale-98 transition-all flex items-center justify-center space-x-2"
+          >
+            <span>구매하러 가기</span>
+            <ExternalLink className="w-5 h-5" />
+          </a>
+        ) : (
+          <button
+            disabled
+            className="w-full py-3.5 bg-slate-200 text-slate-500 font-bold text-xs sm:text-sm rounded-2xl cursor-not-allowed flex items-center justify-center space-x-2"
+          >
+            <span>유효한 상품 구매 페이지 연결 중...</span>
+          </button>
+        )}
       </div>
     </div>
   );

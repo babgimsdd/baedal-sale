@@ -1,8 +1,45 @@
 import os
 import json
 import time
-import urllib.request
-import urllib.parse
+import re
+from urllib.parse import quote
+
+def is_valid_product_url(url):
+    if not url or not isinstance(url, str):
+        return False
+    trimmed = url.strip()
+    if not trimmed or trimmed in ["#", "/"] or not trimmed.startswith("http"):
+        return False
+    
+    main_page_patterns = [
+        r"^https?://(www\.|m\.)?baemin\.com/?(\?.*)?$",
+        r"^https?://(www\.)?coupang\.com/?(\?.*)?$",
+        r"^https?://eats\.coupang\.com/?(\?.*)?$",
+        r"^https?://(www\.|m\.)?yogiyo\.co\.kr/?(\?.*)?$",
+        r"^https?://(www\.)?ddangyo\.com/?(\?.*)?$",
+        r"^https?://(www\.)?kurly\.com/?(\?.*)?$",
+        r"^https?://(www\.)?woodongs\.com/?(\?.*)?$",
+    ]
+    
+    for pattern in main_page_patterns:
+        if re.match(pattern, trimmed, re.IGNORECASE):
+            return False
+            
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(trimmed)
+        path = parsed.path.lower()
+        query = parsed.query.lower()
+        if path in ["", "/"] and not query:
+            return False
+        return any(k in path for k in ["/products/", "/goods/", "/product/", "proddetail", "goods_view", "/item/", "/search", "search.tmall", "browse.gmarket"]) or any(k in query for k in ["prdcd=", "goodsno=", "kwd=", "keyword=", "query=", "q="])
+    except Exception:
+        return False
+
+def sanitize_product_url(url, brand_name):
+    if is_valid_product_url(url):
+        return url.strip()
+    return None
 
 # ==============================================================================
 # 🎫 [실시간 배달앱 금액권 & 치킨 브랜드 기프티콘 크롤러 프로그램]
@@ -155,6 +192,10 @@ def fetch_realtime_coupons():
         # 표기용 할인 텍스트
         formatted_discount_text = f"{disc_price:,}원 ({int(disc_rate)}% 할인)"
 
+        clean_url = sanitize_product_url(item.get("affiliate_link", DEFAULT_11ST_AFFILIATE), item["brand"])
+        if not clean_url:
+            continue
+
         coupon_obj = {
             "id": f"coupon-scraped-{idx + 1}",
             "app": item.get("app", "배민"),
@@ -171,7 +212,8 @@ def fetch_realtime_coupons():
             "category_type": "coupon",  # [요구사항 3] 명확한 type/category 구분
             "type": "coupon",
             "region": "전국",
-            "affiliate_link": item.get("affiliate_link", DEFAULT_11ST_AFFILIATE), # [요구사항 3] 제휴 구매 링크
+            "affiliate_link": clean_url,
+            "purchaseUrl": clean_url,
             "couponCode": item.get("couponCode", ""),
             "linkNote": item.get("linkNote", "특가 구매 페이지 이동"),
             "seller": item.get("seller", "오픈마켓"),

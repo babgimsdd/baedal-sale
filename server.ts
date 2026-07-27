@@ -26,6 +26,59 @@ async function startServer() {
     });
   };
 
+// Helper to check whether a product URL is a valid, specific product detail URL
+function isValidProductUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === '#' || trimmed === '/' || !trimmed.startsWith('http')) {
+    return false;
+  }
+  const mainPagePatterns = [
+    /^https?:\/\/(www\.|m\.)?baemin\.com\/?(\?.*)?$/i,
+    /^https?:\/\/(www\.)?coupang\.com\/?(\?.*)?$/i,
+    /^https?:\/\/eats\.coupang\.com\/?(\?.*)?$/i,
+    /^https?:\/\/(www\.|m\.)?yogiyo\.co\.kr\/?(\?.*)?$/i,
+    /^https?:\/\/(www\.)?ddangyo\.com\/?(\?.*)?$/i,
+    /^https?:\/\/(www\.)?kurly\.com\/?(\?.*)?$/i,
+    /^https?:\/\/(www\.)?woodongs\.com\/?(\?.*)?$/i,
+  ];
+
+  for (const pattern of mainPagePatterns) {
+    if (pattern.test(trimmed)) {
+      return false;
+    }
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.toLowerCase();
+    const search = parsed.search.toLowerCase();
+    if ((pathname === '/' || pathname === '') && !search) {
+      return false;
+    }
+    return (
+      pathname.includes('/vp/products/') ||
+      pathname.includes('/goods/') ||
+      pathname.includes('/product/') ||
+      pathname.includes('/products/') ||
+      pathname.includes('proddetail') ||
+      pathname.includes('goods_view') ||
+      pathname.includes('/item/') ||
+      pathname.includes('/search') ||
+      pathname.includes('search.tmall') ||
+      pathname.includes('browse.gmarket') ||
+      search.includes('prdcd=') ||
+      search.includes('goodsno=') ||
+      search.includes('kwd=') ||
+      search.includes('keyword=') ||
+      search.includes('query=') ||
+      search.includes('q=')
+    );
+  } catch {
+    return false;
+  }
+}
+
   // Health Check Endpoint
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -254,26 +307,31 @@ ${rawContent}`;
         return "korean";
       };
 
-      // 3. [요구사항 2] 할인율 계산: ((정가 - 할인가) / 정가) * 100 (소수점 첫째 자리까지)
-      const processedMealkits = rawMealkits.map((item) => {
-        const orig = item.originalPrice;
-        const disc = item.discountPrice;
-        const discountRate = Math.round(((orig - disc) / orig) * 100 * 10) / 10; // 소수점 첫째자리
-        const categoryTag = categorizeTitle(item.brand);
+      // 3. [요구사항 2] 할인율 계산 및 실제 상품 URL 검증
+      const processedMealkits = rawMealkits
+        .filter((item) => isValidProductUrl(item.affiliate_link))
+        .map((item) => {
+          const orig = item.originalPrice;
+          const disc = item.discountPrice;
+          const discountRate = Math.round(((orig - disc) / orig) * 100 * 10) / 10; // 소수점 첫째자리
+          const categoryTag = categorizeTitle(item.brand);
 
-        return {
-          ...item,
-          discountRate, // 예: 55.1
-          category: categoryTag, // 'korean' | 'chinese' | 'western'
-          category_type: "mealkit",
-          discount: `${disc.toLocaleString()}원 (${Math.round(discountRate)}% 특가)`,
-          validity: "오늘 로켓프레시/샛별배송 마감",
-          minOrder: "무료배송 혜택 적용",
-          region: "전국",
-          is_top_ranked: true,
-          createdAt: Date.now(),
-        };
-      });
+          const finalLink = item.affiliate_link;
+          return {
+            ...item,
+            affiliate_link: finalLink,
+            purchaseUrl: finalLink,
+            discountRate, // 예: 55.1
+            category: categoryTag, // 'korean' | 'chinese' | 'western'
+            category_type: "mealkit",
+            discount: `${disc.toLocaleString()}원 (${Math.round(discountRate)}% 특가)`,
+            validity: "오늘 로켓프레시/샛별배송 마감",
+            minOrder: "무료배송 혜택 적용",
+            region: "전국",
+            is_top_ranked: true,
+            createdAt: Date.now(),
+          };
+        });
 
       // 4. [요구사항 2] 할인율 높은 순 내림차순 정렬 (.sort((a, b) => b.discountRate - a.discountRate))
       processedMealkits.sort((a, b) => b.discountRate - a.discountRate);
@@ -405,26 +463,31 @@ ${rawContent}`;
         }
       ];
 
-      // 1. [요구사항 2] 할인율 자동 계산: ((정가 - 할인가) / 정가) * 100 (소수점 첫째 자리까지)
-      const processedCoupons = rawCoupons.map((item) => {
-        const orig = item.originalPrice;
-        const disc = item.discountPrice;
-        const discountRate = Math.round(((orig - disc) / orig) * 100 * 10) / 10;
+      // 1. [요구사항 2] 할인율 자동 계산 및 실제 상품 URL 검증
+      const processedCoupons = rawCoupons
+        .filter((item) => isValidProductUrl(item.affiliate_link))
+        .map((item) => {
+          const orig = item.originalPrice;
+          const disc = item.discountPrice;
+          const discountRate = Math.round(((orig - disc) / orig) * 100 * 10) / 10;
 
-        return {
-          ...item,
-          discountRate, // 예: 33.3, 20.0, 15.1
-          category: "coupon",
-          category_type: "coupon", // [요구사항 3] type: 'coupon' / category_type: 'coupon'
-          type: "coupon",
-          discount: `${disc.toLocaleString()}원 (${Math.round(discountRate)}% 할인)`,
-          validity: "발급일로부터 90일 유효",
-          minOrder: "제한없음",
-          region: "전국",
-          is_top_ranked: true,
-          createdAt: Date.now(),
-        };
-      });
+          const finalLink = item.affiliate_link;
+          return {
+            ...item,
+            affiliate_link: finalLink,
+            purchaseUrl: finalLink,
+            discountRate, // 예: 33.3, 20.0, 15.1
+            category: "coupon",
+            category_type: "coupon", // [요구사항 3] type: 'coupon' / category_type: 'coupon'
+            type: "coupon",
+            discount: `${disc.toLocaleString()}원 (${Math.round(discountRate)}% 할인)`,
+            validity: "발급일로부터 90일 유효",
+            minOrder: "제한없음",
+            region: "전국",
+            is_top_ranked: true,
+            createdAt: Date.now(),
+          };
+        });
 
       // 2. [요구사항 2] 할인율 가장 높은 순 내림차순 정렬 (.sort((a, b) => b.discountRate - a.discountRate))
       processedCoupons.sort((a, b) => b.discountRate - a.discountRate);

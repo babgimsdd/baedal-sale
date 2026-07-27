@@ -81,9 +81,57 @@ def fetch_delivery_deals_text():
     full_content = "\n".join(collected_texts) + "\n" + default_text
     return full_content[:4000]
 
+import re
+from urllib.parse import quote
+
+def is_valid_product_url(url):
+    if not url or not isinstance(url, str):
+        return False
+    trimmed = url.strip()
+    if not trimmed or trimmed in ["#", "/"] or not trimmed.startswith("http"):
+        return False
+    
+    main_page_patterns = [
+        r"^https?://(www\.|m\.)?baemin\.com/?(\?.*)?$",
+        r"^https?://(www\.)?coupang\.com/?(\?.*)?$",
+        r"^https?://eats\.coupang\.com/?(\?.*)?$",
+        r"^https?://(www\.|m\.)?yogiyo\.co\.kr/?(\?.*)?$",
+        r"^https?://(www\.)?ddangyo\.com/?(\?.*)?$",
+        r"^https?://(www\.)?kurly\.com/?(\?.*)?$",
+        r"^https?://(www\.)?woodongs\.com/?(\?.*)?$",
+        r"^https?://(www\.)?doeat\.io/?(\?.*)?$",
+        r"^https?://(www\.)?specialdelivery\.or\.kr/?(\?.*)?$",
+        r"^https?://(www\.)?daaguro\.com/?(\?.*)?$",
+        r"^https?://(www\.)?mukkebi\.com/?(\?.*)?$",
+        r"^https?://(www\.)?dongbaektong\.com/?(\?.*)?$",
+    ]
+    for pattern in main_page_patterns:
+        if re.match(pattern, trimmed, re.IGNORECASE):
+            return False
+            
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(trimmed)
+        path = parsed.path.lower()
+        query = parsed.query.lower()
+        if path in ["", "/"] and not query:
+            return False
+        return any(k in path for k in ["/products/", "/goods/", "/product/", "proddetail", "goods_view", "/item/", "/search", "search.tmall", "browse.gmarket"]) or any(k in query for k in ["prdcd=", "goodsno=", "kwd=", "keyword=", "query=", "q="])
+    except Exception:
+        return False
+
+def sanitize_product_url(url, brand_name):
+    """
+    검사하여 실증된 구체적 상품 상세 URL인 경우에만 반환하고,
+    미검증 또는 메인페이지인 경우 None을 반환합니다.
+    """
+    if is_valid_product_url(url):
+        return url.strip()
+    return None
+
 def process_with_gemini(raw_text):
     """
-    Gemini 2.5 Flash API를 활용하여 텍스트를 프론트엔드 규격 JSON으로 정제합니다.
+    Gemini API를 활용하여 텍스트에서 실제 확인된 배달 할인 정보만 정제합니다. (AI 추측/허구 생성 엄격 금지)
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -94,7 +142,12 @@ def process_with_gemini(raw_text):
 
     prompt = f"""
 다음은 인터넷에서 수집된 전국 공통 및 지역 특화 배달 앱 할인 정보 원문입니다.
-이 텍스트를 분석하여 최신 배달 할인 목록 8~12개를 규격화된 JSON 배열로 생성해 주세요.
+이 텍스트를 분석하여 실제로 확인 가능한 배달 할인 목록만 규격화된 JSON 배열로 추출해 주세요.
+
+[엄격한 제약조건]:
+1. 절대로 상품 정보를 추측하거나 허구로 생성하지 마십시오.
+2. 항상 수집된 실제 데이터만 추출하고, 구체적인 상품 및 쿠폰 정보가 원문에서 확인된 항목만 포함하세요.
+3. 추측된 상품이나 검증되지 않은 가짜 링크는 절대로 노출/생성하지 마세요.
 
 [앱 구분 규칙]:
 - app 필드는 다음 중 정확히 하나를 선택해야 합니다:
@@ -104,18 +157,18 @@ def process_with_gemini(raw_text):
 [요구사항 JSON 항목 규격]:
 - id: 문자열 ID (예: "1", "2")
 - app: "배민", "쿠팡이츠", "요기요", "땡겨요", "먹깨비", "두잇", "배달특급", "대구로", "동백통" 중 선택
-- brand: 브랜드명 및 매장지점명 (예: BBQ 치킨 관악점, 맘스터치, 도미노피자, 굽네치킨 신림점 등)
-- brand_id: 영문 소문자 식별자 (예: bbq, momstouch, domino, goobne 등)
+- brand: 브랜드명 및 매장지점명 (예: BBQ 치킨 관악점, 맘스터치, 도미노피자 등)
+- brand_id: 영문 소문자 식별자 (예: bbq, momstouch, domino 등)
 - discount: 할인 내용 (예: "4,000원 할인", "무료배달 + 3,000원 쿠폰")
 - validity: 유효기간 (예: "오늘 하루만 유효", "2026.07.24 ~ 07.27")
 - minOrder: 최소주문금액 (예: "18,000원 이상 주문 시")
 - category: "치킨", "피자", "버거", "분식/야식", "카페/디저트", "한식/기타" 중 하나
 - region: 적용 지역 (예: "전국", "서울 관악구", "경기 성남시", "대구 수성구", "부산 부산진구")
 - card_discount: 카드/결제 추가 할인 (없으면 "없음")
-- affiliate_link: 브랜드 공식 앱/웹 주문 주소 또는 제휴 딥링크
+- affiliate_link: 구체적인 제휴 상품 구매/쿠폰 등록 URL (원문에 실제 존재하는 구체적 URL만)
 - is_top_ranked: 할인 혜택이 가장 뛰어난 상위 3개 항목만 true, 나머지 false
 - couponCode: 쿠폰코드 (없으면 빈 문자열 "")
-- linkNote: 혜택 관련 꿀팁 설명 (예: "리뷰이벤트 치즈볼 증정 / 포장 2,000원 추가할인")
+- linkNote: 혜택 관련 설명 (예: "리뷰이벤트 치즈볼 증정 / 포장 2,000원 추가할인")
 - createdAt: 현재 타임스탬프 밀리초 (숫자)
 
 [수집된 원문 텍스트]:
@@ -148,22 +201,33 @@ def process_with_gemini(raw_text):
         
         # timestamp 및 어필리에이트 제휴 링크 보정
         current_ms = int(time.time() * 1000)
+        valid_items = []
         for idx, item in enumerate(data):
             if "id" not in item:
                 item["id"] = str(idx + 1)
             item["createdAt"] = current_ms
             
-            # app 필드 표준화 보정 (배달의민족 -> 배민)
+            # app 필드 표준화 보정
             app_name = item.get("app", "배민")
             if app_name == "배달의민족":
                 app_name = "배민"
                 item["app"] = "배민"
 
-            # 어필리에이트/파스너스 수익 추적 링크 자동 주입
-            if app_name in AFFILIATE_CONFIG and AFFILIATE_CONFIG[app_name]:
-                item["affiliate_link"] = AFFILIATE_CONFIG[app_name]
+            brand = item.get("brand", "특가")
+            raw_url = item.get("affiliate_link")
+            
+            if app_name in AFFILIATE_CONFIG and AFFILIATE_CONFIG[app_name] and not raw_url:
+                raw_url = AFFILIATE_CONFIG[app_name]
 
-        return data
+            # 메인페이지 URL 방지 및 구체적 구매 URL로 소독 (검증 불가 시 제외)
+            clean_url = sanitize_product_url(raw_url, brand)
+            if not clean_url:
+                continue
+            item["affiliate_link"] = clean_url
+            item["purchaseUrl"] = clean_url
+            valid_items.append(item)
+
+        return valid_items
     except Exception as e:
         print(f"Gemini API 처리 중 오류 발생: {e}")
         return None

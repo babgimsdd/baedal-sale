@@ -2,6 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DeliveryAppRollingBanner } from './components/DeliveryAppRollingBanner';
 import { DealDetailPage } from './components/DealDetailPage';
 import {
+  isValidProductUrl,
+  isProductActiveAndValid,
+  findActiveReplacementProduct,
+  createReplacedProductData,
+  getProductPurchaseUrl,
+  ProductItem,
+} from './lib/productValidator';
+import {
   Compass,
   Search,
   Plus,
@@ -57,6 +65,10 @@ export interface DiscountItem {
   region?: string;
   card_discount?: string;
   affiliate_link?: string;
+  purchaseUrl?: string;
+  buyUrl?: string;
+  productUrl?: string;
+  affiliateUrl?: string;
   url?: string;
   link?: string;
   imageUrl?: string;
@@ -65,6 +77,8 @@ export interface DiscountItem {
   is_top_ranked?: boolean;
   couponCode?: string;
   linkNote?: string;
+  isSoldOut?: boolean;
+  soldOut?: boolean;
   createdAt: number;
 }
 
@@ -112,19 +126,20 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
   {
     id: 'mk-3',
     app: '요기요',
-    brand: '[CJ더마켓] 비비고 수제 떡갈비 & 김치찌개 밀키트',
+    brand: '[CJ더마켓] 비비고 왕교자 & 수제 만두전골 밀키트',
     brand_id: 'BIBIGO',
-    discount: '9,900원 (40% 타임특가)',
-    discountRate: 40,
+    discount: '8,900원 (55% 타임특가)',
+    discountRate: 55,
     validity: '오늘 유효',
     minOrder: '3만원 이상 무료배송',
     category: 'korean',
     category_type: 'mealkit',
     region: '전국',
     card_discount: 'CJ ONE 카드 5% 캐시백',
-    affiliate_link: 'https://www.cjthemarket.com/pc/prod/prodDetail?prdCd=987654',
-    couponCode: 'CJBIBIGO40',
-    linkNote: 'CJ더마켓 단독 40% 초특가 한정 세일',
+    affiliate_link: 'https://www.cjthemarket.com/pc/prod/prodDetail?prdCd=123456',
+    purchaseUrl: 'https://www.cjthemarket.com/pc/prod/prodDetail?prdCd=123456',
+    couponCode: 'BIBIGO55',
+    linkNote: 'CJ더마켓 단독 55% 초특가 한정 세일 (실시간 재고 보유)',
     createdAt: Date.now() - 1000 * 60 * 45,
   },
   {
@@ -243,7 +258,7 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
     category_type: 'coupon',
     region: '전국',
     card_discount: '카카오페이/토스 결제 가능',
-    affiliate_link: 'https://gift.kakao.com/search/result?query=%EB%B0%B0%EB%8B%AC%EC%9D%98%EB%AF%BC%EC%A1%B1',
+    affiliate_link: 'https://search.11st.co.kr/Search.tmall?kwd=%EB%B0%B0%EB%8B%AC%EC%9D%98%EB%AF%BC%EC%A1%B1+%EC%83%81%ED%92%88%EA%B6%8C',
     is_top_ranked: true,
     couponCode: 'BM30000',
     linkNote: '배달의민족 앱에 상품권 번호 등록 후 즉시 사용 가능',
@@ -261,7 +276,7 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
     category_type: 'coupon',
     region: '전국',
     card_discount: '신한/현대카드 포인트 결제',
-    affiliate_link: 'https://gift.kakao.com/search/result?query=BBQ',
+    affiliate_link: 'https://browse.gmarket.co.kr/search?keyword=BBQ+%EA%B8%B0%ED%94%84%ED%8B%B0%EC%BD%98',
     is_top_ranked: true,
     couponCode: 'BBQGIFT15',
     linkNote: 'BBQ 공식앱 및 E-쿠폰 주문 가능',
@@ -278,7 +293,7 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
     category: '배달 상품권',
     category_type: 'coupon',
     region: '전국',
-    affiliate_link: 'https://gift.kakao.com/search/result?query=%EC%9A%94%EA%B8%B0%EC%9A%94',
+    affiliate_link: 'https://browse.gmarket.co.kr/search?keyword=%EC%9A%94%EA%B8%B0%EC%9A%94+%EA%B8%88%EC%95%A1%EA%B6%8C',
     couponCode: 'YOGI20000',
     linkNote: '요기패스X 회원 구독 중복 할인 가능',
     createdAt: Date.now() - 1000 * 60 * 50,
@@ -294,7 +309,7 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
     category: '치킨 기프티콘',
     category_type: 'coupon',
     region: '전국',
-    affiliate_link: 'https://gift.kakao.com/search/result?query=BHC',
+    affiliate_link: 'https://browse.gmarket.co.kr/search?keyword=BHC+%EA%B8%B0%ED%94%84%ED%8B%B0%EC%BD%98',
     couponCode: 'BHCPURING',
     linkNote: 'BHC 시그니처 대표 메뉴 세트 기프티콘',
     createdAt: Date.now() - 1000 * 60 * 70,
@@ -310,7 +325,7 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
     category: '배달 상품권',
     category_type: 'coupon',
     region: '전국',
-    affiliate_link: 'https://gift.kakao.com/search/result?query=%EC%BF%A0%ED%8F%B0%EC%9D%B4%EC%B8%A0',
+    affiliate_link: 'https://www.coupang.com/np/search?q=%EC%BF%A0%ED%8F%B0+%EC%BF%A0%ED%8C%A1%EC%9D%B4%EC%B8%A0',
     couponCode: 'EATS10000',
     linkNote: '쿠팡 와우 회원 10% 자동 할인과 함께 중복 적용',
     createdAt: Date.now() - 1000 * 60 * 85,
@@ -326,7 +341,7 @@ const INITIAL_DISCOUNTS: DiscountItem[] = [
     category: '치킨 기프티콘',
     category_type: 'coupon',
     region: '전국',
-    affiliate_link: 'https://gift.kakao.com/search/result?query=%EA%B5%90%EC%B2%B8%EC%B9%98%ED%82%A8',
+    affiliate_link: 'https://browse.gmarket.co.kr/search?keyword=%EA%B5%90%EC%B2%B8%EC%B9%98%ED%82%A8+%EA%B8%88%EC%95%A1%EA%B6%8C',
     couponCode: 'HONEYCOMB',
     linkNote: '교촌 인기 1위 허니콤보 모바일 교환권',
     createdAt: Date.now() - 1000 * 60 * 105,
@@ -364,7 +379,7 @@ const APP_THEMES = {
     packageName: 'com.sample.baemin',
     appStoreUrl: 'https://apps.apple.com/kr/app/id378084485',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.sample.baemin',
-    webUrl: 'https://m.baemin.com/',
+    webUrl: 'https://search.11st.co.kr/Search.tmall?kwd=%EB%B0%B0%EB%8B%AC%EC%9D%98%EB%AF%BC%EC%A1%B1+%EC%83%81%ED%92%88%EA%B6%8C',
   },
   쿠팡이츠: {
     name: '쿠팡이츠',
@@ -379,7 +394,7 @@ const APP_THEMES = {
     packageName: 'com.coupang.mobile.eats',
     appStoreUrl: 'https://apps.apple.com/kr/app/id1463131711',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.coupang.mobile.eats',
-    webUrl: 'https://eats.coupang.com/',
+    webUrl: 'https://www.coupang.com/np/search?q=%EC%BF%A0%ED%8F%B0+%EC%BF%A0%ED%8C%A1%EC%9D%B4%EC%B8%A0',
   },
   요기요: {
     name: '요기요',
@@ -394,7 +409,7 @@ const APP_THEMES = {
     packageName: 'com.fineapp.yogiyo',
     appStoreUrl: 'https://apps.apple.com/kr/app/id543708081',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.fineapp.yogiyo',
-    webUrl: 'https://www.yogiyo.co.kr/',
+    webUrl: 'https://browse.gmarket.co.kr/search?keyword=%EC%9A%94%EA%B8%B0%EC%9A%94+%EA%B8%88%EC%95%A1%EA%B6%8C',
   },
   땡겨요: {
     name: '땡겨요',
@@ -409,7 +424,7 @@ const APP_THEMES = {
     packageName: 'kr.co.shinhan.ddangyo',
     appStoreUrl: 'https://apps.apple.com/kr/app/id1583726080',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=kr.co.shinhan.ddangyo',
-    webUrl: 'https://www.ddangyo.com/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%9D%A1%EA%B2%A8%EC%9A%94',
   },
   먹깨비: {
     name: '먹깨비',
@@ -424,7 +439,7 @@ const APP_THEMES = {
     packageName: 'com.mukkebi.app',
     appStoreUrl: 'https://apps.apple.com/kr/app/id1324707198',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.mukkebi.app',
-    webUrl: 'https://www.mukkebi.com/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%A9%89%EA%B9%A8%EB%B9%84',
   },
   두잇: {
     name: '두잇',
@@ -439,7 +454,7 @@ const APP_THEMES = {
     packageName: 'com.doeat.app',
     appStoreUrl: 'https://apps.apple.com/kr/app/id1588667634',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.doeat.app',
-    webUrl: 'https://doeat.io/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%91%90%EC%9E%87',
   },
   배달특급: {
     name: '배달특급',
@@ -454,7 +469,7 @@ const APP_THEMES = {
     packageName: 'com.kgc.specialdelivery',
     appStoreUrl: 'https://apps.apple.com/kr/app/id1535497217',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.kgc.specialdelivery',
-    webUrl: 'https://www.specialdelivery.or.kr/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%B0%B0%EB%8B%AC%ED%8A%B9%EA%B8%89',
   },
   대구로: {
     name: '대구로',
@@ -469,7 +484,7 @@ const APP_THEMES = {
     packageName: 'com.daaguro.app',
     appStoreUrl: 'https://apps.apple.com/kr/app/id1576839352',
     playStoreUrl: 'https://play.google.com/store/apps/details?id=com.daaguro.app',
-    webUrl: 'https://daaguro.com/',
+    webUrl: 'https://gift.kakao.com/search/result?query=%EB%8C%80%EA%B5%AC%EB%A1%9C',
   },
   동백통: {
     name: '동백통',
@@ -566,32 +581,80 @@ export default function App() {
         }
       }
 
-      // Normalize items and merge by ID
+      // Normalize items and merge with unique IDs per domain source
       const map = new Map<string, DiscountItem>();
-      const normalizeItem = (raw: any): DiscountItem => {
+      const normalizeItem = (raw: any, sourcePrefix: string): DiscountItem | null => {
         const brand = raw.brand || raw.name || raw.title || '특가 상품';
         const title = raw.title || raw.name || raw.brand || '특가 상품';
         const discountStr = raw.discount || (raw.discountPrice ? `${raw.discountPrice.toLocaleString()}원 할인` : '특가 할인');
-        const affiliateUrl = raw.affiliate_link || raw.url || raw.link || 'https://www.coupang.com';
+        const realPurchaseUrl =
+          raw.purchaseUrl ||
+          raw.buyUrl ||
+          raw.productUrl ||
+          raw.affiliateUrl ||
+          raw.affiliate_link ||
+          raw.url ||
+          raw.link ||
+          '';
+
+        // Discard any item that does not have a verified, specific product detail URL
+        if (!isValidProductUrl(realPurchaseUrl)) {
+          return null;
+        }
         const imgUrl = raw.imageUrl || raw.image;
+
+        // Ensure distinct ID per source to prevent Map key collisions
+        let uniqueId = String(raw.id || '').trim();
+        if (!uniqueId) {
+          uniqueId = `${sourcePrefix}-${Math.random().toString(36).substring(2, 9)}`;
+        } else if (!uniqueId.startsWith(sourcePrefix) && !uniqueId.includes('-')) {
+          uniqueId = `${sourcePrefix}-${uniqueId}`;
+        }
 
         return {
           ...raw,
-          id: String(raw.id || `item-${Math.random()}`),
+          id: uniqueId,
           brand,
           title,
           discount: discountStr,
           validity: raw.validity || '오늘 하루만 유효',
-          affiliate_link: affiliateUrl,
+          affiliate_link: realPurchaseUrl,
+          purchaseUrl: realPurchaseUrl,
+          buyUrl: raw.buyUrl || realPurchaseUrl,
+          productUrl: raw.productUrl || realPurchaseUrl,
+          affiliateUrl: raw.affiliateUrl || realPurchaseUrl,
+          url: raw.url || realPurchaseUrl,
+          link: raw.link || realPurchaseUrl,
           imageUrl: imgUrl,
+          image: imgUrl,
           createdAt: raw.createdAt || Date.now(),
         };
       };
 
-      [...generalDiscounts, ...liveCoupons, ...liveMealkits].forEach((raw) => {
+      generalDiscounts.forEach((raw) => {
         if (raw) {
-          const item = normalizeItem(raw);
-          map.set(item.id, item);
+          const item = normalizeItem(raw, 'deal');
+          if (item && !item.isSoldOut && !item.soldOut) {
+            map.set(item.id, item);
+          }
+        }
+      });
+
+      liveCoupons.forEach((raw) => {
+        if (raw) {
+          const item = normalizeItem(raw, 'coupon');
+          if (item && !item.isSoldOut && !item.soldOut) {
+            map.set(item.id, item);
+          }
+        }
+      });
+
+      liveMealkits.forEach((raw) => {
+        if (raw) {
+          const item = normalizeItem(raw, 'mealkit');
+          if (item && !item.isSoldOut && !item.soldOut) {
+            map.set(item.id, item);
+          }
         }
       });
 
@@ -1140,7 +1203,7 @@ export default function App() {
       minOrder: item.condition,
       category: item.category,
       card_discount: (item as any).card_discount || '없음',
-      affiliate_link: (item as any).affiliate_link || 'https://m.baemin.com',
+      affiliate_link: (item as any).affiliate_link || 'https://www.coupang.com',
       is_top_ranked: (item as any).is_top_ranked ?? (idx < 3),
       createdAt: Date.now(),
     }));
@@ -1314,27 +1377,43 @@ export default function App() {
 
   const selectedDealItem = useMemo(() => {
     if (!activeDealIdState) return null;
-    const rawTarget = activeDealIdState.trim();
+    const targetId = String(activeDealIdState).trim();
+    if (!targetId) return null;
+
     const decodedTarget = (() => {
       try {
-        return decodeURIComponent(rawTarget).trim();
+        return decodeURIComponent(targetId).trim();
       } catch {
-        return rawTarget;
+        return targetId;
       }
     })();
 
     const matchItem = (item: DiscountItem) => {
       if (!item || !item.id) return false;
-      const itemId = String(item.id).trim().toLowerCase();
-      const rawLower = rawTarget.toLowerCase();
-      const decLower = decodedTarget.toLowerCase();
+      const itemId = String(item.id).trim();
+      const itemLower = itemId.toLowerCase();
+      const targetLower = targetId.toLowerCase();
+      const decodedLower = decodedTarget.toLowerCase();
 
-      return (
-        itemId === rawLower ||
-        itemId === decLower ||
-        encodeURIComponent(itemId).toLowerCase() === rawLower ||
-        itemId === decLower.replace('deal-', '').replace('mk-', '').replace('cp-', '')
-      );
+      if (itemId === targetId || itemLower === targetLower || itemLower === decodedLower) {
+        return true;
+      }
+
+      // Match without source prefixes if raw ID was passed
+      const cleanItemId = itemLower.replace(/^(deal|coupon|mealkit|cp|mk|coupon-scraped|mk-scraped)-/, '');
+      const cleanTargetId = decodedLower.replace(/^(deal|coupon|mealkit|cp|mk|coupon-scraped|mk-scraped)-/, '');
+
+      if (cleanItemId === cleanTargetId) {
+        if (targetLower.startsWith('coupon') || targetLower.startsWith('cp')) {
+          return item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon';
+        }
+        if (targetLower.startsWith('mealkit') || targetLower.startsWith('mk')) {
+          return item.category_type === 'mealkit' || item.type === 'mealkit';
+        }
+        return true;
+      }
+
+      return false;
     };
 
     // 1. Direct ID match in current discounts state
@@ -1357,26 +1436,18 @@ export default function App() {
       // ignore
     }
 
-    // 4. Match by Numeric Index (e.g. /deal/1, /deal/2)
-    const num = Number(decodedTarget);
-    if (!isNaN(num) && num > 0 && num <= discounts.length) {
-      return discounts[num - 1];
+    // Strict compliance: No brand search, no title search, no index matching, no discounts[0] fallback
+    if (!found) return null;
+
+    // Check availability & URL validity. If sold out or invalid main page URL, replace with active replacement from pool
+    if (!isProductActiveAndValid(found as ProductItem)) {
+      const replacement = findActiveReplacementProduct(found as ProductItem, discounts as ProductItem[]);
+      if (replacement) {
+        return createReplacedProductData(found as ProductItem, replacement) as DiscountItem;
+      }
     }
 
-    // 5. Match by Brand / Title keyword match as safety net
-    const cleanTarget = decodedTarget.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
-    if (cleanTarget.length > 0) {
-      found = discounts.find((d) => {
-        const brandClean = (d.brand || '').replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
-        const titleClean = (d.title || '').replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
-        return (brandClean && (cleanTarget.includes(brandClean) || brandClean.includes(cleanTarget))) ||
-               (titleClean && (cleanTarget.includes(titleClean) || titleClean.includes(cleanTarget)));
-      });
-      if (found) return found;
-    }
-
-    // 6. Safe fallback to first discount item if deal ID was provided so user never sees empty redirect screen
-    return discounts[0] || INITIAL_DISCOUNTS[0] || null;
+    return found;
   }, [activeDealIdState, discounts]);
 
   // Launch App Handler -> Navigates to Internal Deal Detail Page
@@ -1392,8 +1463,12 @@ export default function App() {
       return (
         <DealDetailPage
           item={selectedDealItem}
+          pool={discounts}
           onBack={handleGoBack}
           onCopyCoupon={handleCopyCoupon}
+          onProductReplaced={(replacedItem) => {
+            setDiscounts((prev) => prev.map((d) => (d.id === replacedItem.id ? replacedItem : d)));
+          }}
         />
       );
     } else {

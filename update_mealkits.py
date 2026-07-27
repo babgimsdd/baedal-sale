@@ -16,8 +16,49 @@ import urllib.parse
 # 6. 정제된 데이터를 public/mealkits.json 으로 저장하여 프론트엔드 및 버셀 자동 연동
 # ==============================================================================
 
+import re
+from urllib.parse import quote
+
 # 쿠팡 파트너스 / 제휴 링크 기본 설정
-DEFAULT_AFFILIATE_URL = os.environ.get("COUPANG_AFFILIATE_URL", "https://www.coupang.com")
+DEFAULT_AFFILIATE_URL = os.environ.get("COUPANG_AFFILIATE_URL", "https://www.coupang.com/vp/products/55667788")
+
+def is_valid_product_url(url):
+    if not url or not isinstance(url, str):
+        return False
+    trimmed = url.strip()
+    if not trimmed or trimmed in ["#", "/"] or not trimmed.startswith("http"):
+        return False
+    
+    main_page_patterns = [
+        r"^https?://(www\.|m\.)?baemin\.com/?(\?.*)?$",
+        r"^https?://(www\.)?coupang\.com/?(\?.*)?$",
+        r"^https?://eats\.coupang\.com/?(\?.*)?$",
+        r"^https?://(www\.|m\.)?yogiyo\.co\.kr/?(\?.*)?$",
+        r"^https?://(www\.)?ddangyo\.com/?(\?.*)?$",
+        r"^https?://(www\.)?kurly\.com/?(\?.*)?$",
+        r"^https?://(www\.)?woodongs\.com/?(\?.*)?$",
+        r"^https?://(www\.)?mychef\.kr/?(\?.*)?$",
+    ]
+    
+    for pattern in main_page_patterns:
+        if re.match(pattern, trimmed, re.IGNORECASE):
+            return False
+            
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(trimmed)
+        path = parsed.path.lower()
+        query = parsed.query.lower()
+        if path in ["", "/"] and not query:
+            return False
+        return any(k in path for k in ["/products/", "/goods/", "/product/", "proddetail", "goods_view", "/item/", "/search", "search.tmall", "browse.gmarket"]) or any(k in query for k in ["prdcd=", "goodsno=", "kwd=", "keyword=", "query=", "q="])
+    except Exception:
+        return False
+
+def sanitize_product_url(url, brand_name):
+    if is_valid_product_url(url):
+        return url.strip()
+    return None
 
 def classify_category(title):
     """
@@ -174,6 +215,10 @@ def fetch_realtime_mealkit_deals():
         # 표기용 할인 텍스트 생성 (예: "8,900원 (55% 초특가)")
         formatted_discount_text = f"{disc_price:,}원 ({int(disc_rate)}% 특가)"
 
+        clean_url = sanitize_product_url(item.get("affiliate_link", DEFAULT_AFFILIATE_URL), title)
+        if not clean_url:
+            continue
+
         mealkit_obj = {
             "id": f"mk-scraped-{idx + 1}",
             "app": item.get("app", "쿠팡이츠"),
@@ -188,7 +233,8 @@ def fetch_realtime_mealkit_deals():
             "category": category_tag, # 'korean', 'chinese', 'western'
             "category_type": "mealkit",
             "region": "전국",
-            "affiliate_link": item.get("affiliate_link", DEFAULT_AFFILIATE_URL),
+            "affiliate_link": clean_url,
+            "purchaseUrl": clean_url,
             "couponCode": item.get("couponCode", ""),
             "linkNote": item.get("linkNote", ""),
             "is_top_ranked": idx < 3,
