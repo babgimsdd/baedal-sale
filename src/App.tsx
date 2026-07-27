@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DeliveryAppRollingBanner } from './components/DeliveryAppRollingBanner';
+import { DealDetailPage } from './components/DealDetailPage';
 import {
   Compass,
   Search,
@@ -29,7 +30,8 @@ import {
   Code,
   FileJson,
   Link as LinkIcon,
-  Bell
+  Bell,
+  AlertCircle
 } from 'lucide-react';
 
 // Delivery App Type Definition
@@ -41,9 +43,12 @@ export interface DiscountItem {
   brand: string;
   brand_id?: string;
   discount: string;
+  discountRate?: number; // 할인율 (숫자, 예: 50 = 50%)
   validity: string;
   minOrder?: string;
-  category?: string;
+  category?: string; // 'korean' | 'chinese' | 'western' | 기타
+  category_type?: 'mealkit' | 'coupon';
+  region?: string;
   card_discount?: string;
   affiliate_link?: string;
   is_top_ranked?: boolean;
@@ -52,88 +57,285 @@ export interface DiscountItem {
   createdAt: number;
 }
 
-// Initial Sample Data
+// Initial Sample Data (Requirement #1 & #3: 밀키트 특가 한식/중식/양식 데이터 세트 & 배달 쿠폰)
 const INITIAL_DISCOUNTS: DiscountItem[] = [
+  // 1. [🍲 밀키트 특가] - 한식(korean), 중식(chinese), 양식(western) 샘플 데이터 (다양한 할인율)
   {
-    id: '1',
-    app: '배민',
-    brand: 'BBQ 치킨',
-    brand_id: 'BBQ',
-    discount: '4,000원 할인',
-    validity: '오늘 하루만 유효',
-    minOrder: '18,000원 이상',
-    category: '치킨',
-    card_discount: '신한카드 2,000원 추가 할인',
-    affiliate_link: 'https://m.baemin.com',
-    is_top_ranked: true,
-    couponCode: 'BBQ0724',
-    linkNote: '배달의민족 앱 브랜드관 쿠폰팩 다운로드',
-    createdAt: Date.now() - 1000 * 60 * 15,
-  },
-  {
-    id: '2',
+    id: 'mk-1',
     app: '쿠팡이츠',
-    brand: '버거킹',
-    brand_id: 'BURGERKING',
-    discount: '5,000원 할인',
-    validity: '오늘 하루만 유효',
-    minOrder: '15,000원 이상',
-    category: '버거',
-    card_discount: '카카오페이 1,000원 즉시 할인',
-    affiliate_link: 'https://eats.coupang.com',
+    brand: '[쿠팡프레시] 프레시지 블랙라벨 스테이크 (2인분)',
+    brand_id: 'FRESHASY',
+    discount: '15,900원 (45% 초특가)',
+    discountRate: 45,
+    validity: '오늘 로켓프레시 마감',
+    minOrder: '무료배송 (쿠팡 와우)',
+    category: 'western',
+    category_type: 'mealkit',
+    region: '전국',
+    card_discount: '쿠팡페이 결제 시 5% 추가 적립',
+    affiliate_link: 'https://www.coupang.com/vp/products/123456789',
     is_top_ranked: true,
-    couponCode: 'EATS4YOU',
-    linkNote: '쿠팡 와우 회원 10% 자동 할인 중복 적용 가능',
-    createdAt: Date.now() - 1000 * 60 * 40,
+    couponCode: 'FRESH45',
+    linkNote: '쿠팡 로켓프레시 한정수량 할인 특가',
+    createdAt: Date.now() - 1000 * 60 * 10,
   },
   {
-    id: '3',
+    id: 'mk-2',
+    app: '배민',
+    brand: '[마켓컬리] 이연복의 목란 짜장면 & 짬뽕 밀키트 4인분',
+    brand_id: 'MOKRAN',
+    discount: '18,900원 (35% 특가)',
+    discountRate: 35,
+    validity: '오늘 23시 샛별배송 마감',
+    minOrder: '4만원 이상 무료배송',
+    category: 'chinese',
+    category_type: 'mealkit',
+    region: '전국',
+    card_discount: '컬리카드 1,000원 즉시 할인',
+    affiliate_link: 'https://www.kurly.com/goods/123456',
+    is_top_ranked: true,
+    couponCode: 'KURLY35',
+    linkNote: '마켓컬리 베스트셀러 이연복 목란 중식 밀키트',
+    createdAt: Date.now() - 1000 * 60 * 25,
+  },
+  {
+    id: 'mk-3',
     app: '요기요',
-    brand: '반올림피자',
-    discount: '6,000원 할인',
-    validity: '오늘 하루만 유효',
-    minOrder: '20,000원 이상',
-    category: '피자',
-    couponCode: 'YOGIPIZZA',
-    linkNote: '요기서결제 시 6,000원 즉시 할인 쿠폰',
+    brand: '[CJ더마켓] 비비고 수제 떡갈비 & 김치찌개 밀키트',
+    brand_id: 'BIBIGO',
+    discount: '9,900원 (40% 타임특가)',
+    discountRate: 40,
+    validity: '오늘 유효',
+    minOrder: '3만원 이상 무료배송',
+    category: 'korean',
+    category_type: 'mealkit',
+    region: '전국',
+    card_discount: 'CJ ONE 카드 5% 캐시백',
+    affiliate_link: 'https://www.cjthemarket.com/pc/prod/prodDetail?prdCd=987654',
+    couponCode: 'CJBIBIGO40',
+    linkNote: 'CJ더마켓 단독 40% 초특가 한정 세일',
+    createdAt: Date.now() - 1000 * 60 * 45,
+  },
+  {
+    id: 'mk-4',
+    app: '쿠팡이츠',
+    brand: '[쿠팡프레시] 마이셰프 감바스 알 아히요 밀키트',
+    brand_id: 'MYCHEF',
+    discount: '11,500원 (30% 할인)',
+    discountRate: 30,
+    validity: '오늘 로켓프레시 마감',
+    minOrder: '15,000원 이상',
+    category: 'western',
+    category_type: 'mealkit',
+    region: '전국',
+    affiliate_link: 'https://www.coupang.com/vp/products/11223344',
+    couponCode: 'MYCHEF30',
+    linkNote: '홈파티 대표 메뉴 감바스 셰프 밀키트',
     createdAt: Date.now() - 1000 * 60 * 60,
   },
   {
-    id: '4',
+    id: 'mk-5',
     app: '땡겨요',
-    brand: '처갓집양념치킨',
-    discount: '7,000원 할인',
-    validity: '오늘 하루만 유효',
-    minOrder: '19,000원 이상',
-    category: '치킨',
-    couponCode: 'DDANG0724',
-    linkNote: '땡겨요 첫주문 또는 신한카드 결제 추가혜택',
+    brand: '[GS프레시몰] 심플리쿡 우삼겹 순두부찌개 밀키트',
+    brand_id: 'SIMPLYCOOK',
+    discount: '8,900원 (50% 폭풍할인)',
+    discountRate: 50,
+    validity: '오늘 당일배송',
+    minOrder: '2만원 이상 무료배송',
+    category: 'korean',
+    category_type: 'mealkit',
+    region: '전국',
+    affiliate_link: 'https://woodongs.com/product/556677',
+    couponCode: 'SIMPLY50',
+    linkNote: 'GS25 편의점 및 GS프레시몰 수령 가능',
     createdAt: Date.now() - 1000 * 60 * 90,
   },
   {
-    id: '5',
+    id: 'mk-6',
     app: '배민',
-    brand: '동대문 엽기떡볶이',
-    discount: '3,000원 할인',
-    validity: '오늘 하루만 유효',
-    minOrder: '14,000원 이상',
-    category: '분식/야식',
-    couponCode: 'YUPTTEOK',
-    linkNote: '배민 포장주문 선택 시 3,000원 할인',
-    createdAt: Date.now() - 1000 * 60 * 120,
+    brand: '[마켓컬리] 하남돼지집 초벌 구이 삼겹살 밀키트',
+    brand_id: 'HANAM',
+    discount: '14,500원 (25% 할인)',
+    discountRate: 25,
+    validity: '오늘 샛별배송',
+    minOrder: '4만원 이상 무료배송',
+    category: 'korean',
+    category_type: 'mealkit',
+    region: '전국',
+    affiliate_link: 'https://www.kurly.com/goods/112233',
+    couponCode: 'HANAM25',
+    linkNote: '집에서 즐기는 하남돼지집 직화 초벌구이',
+    createdAt: Date.now() - 1000 * 60 * 110,
   },
   {
-    id: '6',
-    app: '쿠팡이츠',
-    brand: '공차 (Gong cha)',
-    discount: '4,000원 할인',
-    validity: '오늘 하루만 유효',
-    minOrder: '12,000원 이상',
-    category: '카페/디저트',
-    couponCode: 'GONGCHA07',
-    linkNote: '쿠팡이츠 음료 카테고리 딜 쿠폰',
-    createdAt: Date.now() - 1000 * 60 * 180,
+    id: 'mk-7',
+    app: '요기요',
+    brand: '[CJ더마켓] 홍콩반점 찹쌀탕수육 & 마파두부 밀키트',
+    brand_id: 'HONGKONG',
+    discount: '13,200원 (42% 타임세일)',
+    discountRate: 42,
+    validity: '오늘 유효',
+    minOrder: '25,000원 이상 무료배송',
+    category: 'chinese',
+    category_type: 'mealkit',
+    region: '전국',
+    affiliate_link: 'https://www.cjthemarket.com/pc/prod/prodDetail?prdCd=334455',
+    couponCode: 'HK42SALE',
+    linkNote: '바삭한 찹쌀탕수육과 매콤 마파두부 세트',
+    createdAt: Date.now() - 1000 * 60 * 125,
   },
+  {
+    id: 'mk-8',
+    app: '쿠팡이츠',
+    brand: '[쿠팡프레시] 폰타나 베이컨 크림 파스타 밀키트',
+    brand_id: 'FONTANA',
+    discount: '10,800원 (20% 할인)',
+    discountRate: 20,
+    validity: '오늘 로켓프레시 마감',
+    minOrder: '15,000원 이상',
+    category: 'western',
+    category_type: 'mealkit',
+    region: '전국',
+    affiliate_link: 'https://www.coupang.com/vp/products/55667788',
+    couponCode: 'FONTANA20',
+    linkNote: '이탈리아 정통 스타일 베이컨 크림 파스타',
+    createdAt: Date.now() - 1000 * 60 * 140,
+  },
+  {
+    id: 'mk-9',
+    app: '배민',
+    brand: '[마켓컬리] 원조 소포장 안동찜닭 밀키트 (3인분)',
+    brand_id: 'ANDONG',
+    discount: '16,500원 (15% 할인)',
+    discountRate: 15,
+    validity: '오늘 샛별배송',
+    minOrder: '4만원 이상 무료배송',
+    category: 'korean',
+    category_type: 'mealkit',
+    region: '전국',
+    affiliate_link: 'https://www.kurly.com/goods/556677',
+    couponCode: 'ANDONG15',
+    linkNote: '달콤 짭조름한 원조 안동찜닭 밀키트',
+    createdAt: Date.now() - 1000 * 60 * 150,
+  },
+
+  // 2. [🎫 배달/치킨 쿠폰]
+  {
+    id: 'cp-1',
+    app: '배민',
+    brand: '[배달의민족] 배민 모바일 30,000원 금액권',
+    brand_id: 'BAEMIN',
+    discount: '28,500원 (5% 할인 구매)',
+    validity: '발행일로부터 365일 유효',
+    minOrder: '제한 없음 (배민 전체 매장)',
+    category: '배달 상품권',
+    category_type: 'coupon',
+    region: '전국',
+    card_discount: '카카오페이/토스 결제 가능',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=%EB%B0%B0%EB%8B%AC%EC%9D%98%EB%AF%BC%EC%A1%B1',
+    is_top_ranked: true,
+    couponCode: 'BM30000',
+    linkNote: '배달의민족 앱에 상품권 번호 등록 후 즉시 사용 가능',
+    createdAt: Date.now() - 1000 * 60 * 15,
+  },
+  {
+    id: 'cp-2',
+    app: '배민',
+    brand: '[BBQ 치킨] 황금올리브치킨 + 콜라 1.25L 기프티콘',
+    brand_id: 'BBQ',
+    discount: '20,000원 (15% 초특가)',
+    validity: '발행일로부터 90일 유효',
+    minOrder: 'BBQ 전국 매장 배달/포장',
+    category: '치킨 기프티콘',
+    category_type: 'coupon',
+    region: '전국',
+    card_discount: '신한/현대카드 포인트 결제',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=BBQ',
+    is_top_ranked: true,
+    couponCode: 'BBQGIFT15',
+    linkNote: 'BBQ 공식앱 및 E-쿠폰 주문 가능',
+    createdAt: Date.now() - 1000 * 60 * 30,
+  },
+  {
+    id: 'cp-3',
+    app: '요기요',
+    brand: '[요기요] 요기요 20,000원 모바일 상품권',
+    brand_id: 'YOGIYO',
+    discount: '18,500원 (7.5% 할인)',
+    validity: '발행일로부터 1년 유효',
+    minOrder: '요기요 앱 전체 주문',
+    category: '배달 상품권',
+    category_type: 'coupon',
+    region: '전국',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=%EC%9A%94%EA%B8%B0%EC%9A%94',
+    couponCode: 'YOGI20000',
+    linkNote: '요기패스X 회원 구독 중복 할인 가능',
+    createdAt: Date.now() - 1000 * 60 * 50,
+  },
+  {
+    id: 'cp-4',
+    app: '쿠팡이츠',
+    brand: '[BHC 치킨] 뿌링클 + 치즈볼 + 콜라 세트 쿠폰',
+    brand_id: 'BHC',
+    discount: '21,000원 (12% 할인)',
+    validity: '발행일로부터 90일 유효',
+    minOrder: 'BHC 전국 매장 가능',
+    category: '치킨 기프티콘',
+    category_type: 'coupon',
+    region: '전국',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=BHC',
+    couponCode: 'BHCPURING',
+    linkNote: 'BHC 시그니처 대표 메뉴 세트 기프티콘',
+    createdAt: Date.now() - 1000 * 60 * 70,
+  },
+  {
+    id: 'cp-5',
+    app: '쿠팡이츠',
+    brand: '[쿠팡이츠] 쿠팡이츠 10,000원 모바일 쿠폰',
+    brand_id: 'COUPEATS',
+    discount: '9,200원 (8% 할인)',
+    validity: '발행일로부터 180일 유효',
+    minOrder: '쿠팡이츠 와우 할인 중복',
+    category: '배달 상품권',
+    category_type: 'coupon',
+    region: '전국',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=%EC%BF%A0%ED%8F%B0%EC%9D%B4%EC%B8%A0',
+    couponCode: 'EATS10000',
+    linkNote: '쿠팡 와우 회원 10% 자동 할인과 함께 중복 적용',
+    createdAt: Date.now() - 1000 * 60 * 85,
+  },
+  {
+    id: 'cp-6',
+    app: '배민',
+    brand: '[교촌치킨] 교촌 허니콤보 + 퐁듀치즈볼 기프티콘',
+    brand_id: 'KYOCHON',
+    discount: '21,500원 (10% 할인)',
+    validity: '발행일로부터 90일 유효',
+    minOrder: '교촌치킨 전국 매장',
+    category: '치킨 기프티콘',
+    category_type: 'coupon',
+    region: '전국',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=%EA%B5%90%EC%B2%B8%EC%B9%98%ED%82%A8',
+    couponCode: 'HONEYCOMB',
+    linkNote: '교촌 인기 1위 허니콤보 모바일 교환권',
+    createdAt: Date.now() - 1000 * 60 * 105,
+  },
+  {
+    id: 'cp-7',
+    app: '두잇',
+    brand: '[굽네치킨] 굽네 고추바사삭 + 에그타르트 기프티콘',
+    brand_id: 'GOOBNE',
+    discount: '18,000원 (14% 할인)',
+    validity: '발행일로부터 90일 유효',
+    minOrder: '굽네치킨 전매장 가능',
+    category: '치킨 기프티콘',
+    category_type: 'coupon',
+    region: '전국',
+    affiliate_link: 'https://gift.kakao.com/search/result?query=%EA%B5%BD%EB%84%A4%EC%B9%98%ED%82%A8',
+    couponCode: 'GOOBNE14',
+    linkNote: '오븐구이 대표 굽네 고추바사삭 기프티콘',
+    createdAt: Date.now() - 1000 * 60 * 130,
+  }
 ];
 
 // Delivery App Theme Config (Toss minimal style + App Signature Colors + Deep Link Specs)
@@ -293,29 +495,91 @@ export default function App() {
   const [isRefreshingLive, setIsRefreshingLive] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string | null>(null);
 
-  // Fetch Live Updated Discounts JSON from Server/GitHub
+  // Fetch Live Updated Discounts, Coupons & Mealkits JSON from Server/GitHub
   const fetchLiveDiscounts = async (silent = false) => {
     try {
       if (!silent) setIsRefreshingLive(true);
-      const res = await fetch(`/discounts.json?t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setDiscounts(data);
-          try {
-            localStorage.setItem('delivery_compass_discounts_v1', JSON.stringify(data));
-          } catch (e) {
-            console.error(e);
+      
+      // 1. Fetch general delivery app discounts
+      let generalDiscounts: DiscountItem[] = [];
+      try {
+        const res = await fetch(`/discounts.json?t=${Date.now()}`);
+        if (res.ok) {
+          generalDiscounts = await res.json();
+        } else {
+          generalDiscounts = INITIAL_DISCOUNTS;
+        }
+      } catch {
+        generalDiscounts = INITIAL_DISCOUNTS;
+      }
+
+      // 2. Fetch live open market coupons (배민/요기요 금액권 & 치킨 기프티콘)
+      let liveCoupons: DiscountItem[] = [];
+      try {
+        const couponsRes = await fetch(`/api/coupons?t=${Date.now()}`);
+        if (couponsRes.ok) {
+          const json = await couponsRes.json();
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            liveCoupons = json.data;
           }
-          const nowStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-          setLastUpdatedTime(nowStr);
-          if (!silent) {
-            showToast(`🔄 실시간 배달 핫딜 데이터 ${data.length}건 연동 완료! (${nowStr})`);
+        }
+        if (liveCoupons.length === 0) {
+          const staticCouponRes = await fetch(`/coupons.json?t=${Date.now()}`);
+          if (staticCouponRes.ok) {
+            const list = await staticCouponRes.json();
+            if (Array.isArray(list)) liveCoupons = list;
           }
+        }
+      } catch (couponErr) {
+        console.log('Live coupon API fetch fallback:', couponErr);
+      }
+
+      // 3. Fetch live scraped mealkits
+      let liveMealkits: DiscountItem[] = [];
+      try {
+        const mealkitsRes = await fetch(`/api/mealkits?t=${Date.now()}`);
+        if (mealkitsRes.ok) {
+          const json = await mealkitsRes.json();
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            liveMealkits = json.data;
+          }
+        }
+        if (liveMealkits.length === 0) {
+          const staticMealkitRes = await fetch(`/mealkits.json?t=${Date.now()}`);
+          if (staticMealkitRes.ok) {
+            const list = await staticMealkitRes.json();
+            if (Array.isArray(list)) liveMealkits = list;
+          }
+        }
+      } catch (mealkitErr) {
+        console.log('Live mealkit API fetch fallback:', mealkitErr);
+      }
+
+      // Merge all items uniquely by ID to preserve general discounts, coupons, and mealkits
+      const map = new Map<string, DiscountItem>();
+      [...generalDiscounts, ...liveCoupons, ...liveMealkits].forEach((item) => {
+        if (item && item.id) {
+          map.set(item.id, item);
+        }
+      });
+
+      const mergedDiscounts = Array.from(map.values());
+
+      if (mergedDiscounts.length > 0) {
+        setDiscounts(mergedDiscounts);
+        try {
+          localStorage.setItem('delivery_compass_discounts_v1', JSON.stringify(mergedDiscounts));
+        } catch (e) {
+          console.error(e);
+        }
+        const nowStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        setLastUpdatedTime(nowStr);
+        if (!silent) {
+          showToast(`🔄 실시간 배달/치킨 쿠폰 및 밀키트 핫딜 연동 완료! (${nowStr})`);
         }
       }
     } catch (err) {
-      console.error('Failed to fetch live discounts.json:', err);
+      console.error('Failed to fetch live discounts:', err);
     } finally {
       setIsRefreshingLive(false);
     }
@@ -331,6 +595,8 @@ export default function App() {
   }, []);
 
   // Active filter states
+  const [selectedMainTab, setSelectedMainTab] = useState<'mealkit' | 'coupon'>('mealkit');
+  const [selectedMealkitCategory, setSelectedMealkitCategory] = useState<'all' | 'korean' | 'chinese' | 'western'>('all');
   const [selectedApp, setSelectedApp] = useState<DeliveryApp>('전체');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('전체');
@@ -582,29 +848,129 @@ export default function App() {
     }, 2500);
   };
 
-  // Filtered List calculation
+  // Extract major region keyword from userAddress (e.g. '서울', '경기', '대구', '부산', '인천' etc.)
+  const userRegionKeyword = useMemo(() => {
+    if (!userAddress) return '전국';
+    const regions = ['서울', '경기', '대구', '부산', '인천', '광주', '대전', '울산', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
+    for (const r of regions) {
+      if (userAddress.includes(r)) return r;
+    }
+    return '전국';
+  }, [userAddress]);
+
+  // Helper to distinguish mealkit items from delivery app coupons
+  const isMealkitItem = (item: DiscountItem) => {
+    return (
+      item.category_type === 'mealkit' ||
+      item.brand.includes('밀키트') ||
+      item.brand.includes('쿠팡프레시') ||
+      item.brand.includes('마켓컬리') ||
+      item.brand.includes('CJ더마켓') ||
+      item.brand.includes('프레시') ||
+      item.brand.includes('컬리') ||
+      item.category === 'korean' ||
+      item.category === 'chinese' ||
+      item.category === 'western'
+    );
+  };
+
+  // Counts for main tabs (Requirement: 밀키트 특가 vs 배달/치킨 쿠폰 완전 분리)
+  const mealkitCount = useMemo(() => {
+    return discounts.filter(isMealkitItem).length;
+  }, [discounts]);
+
+  const couponCount = useMemo(() => {
+    return discounts.filter((item) => item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon').length;
+  }, [discounts]);
+
+  // Filtered List calculation (Reflect user address, main category tabs, subcategories & region)
   const filteredDiscounts = useMemo(() => {
-    return discounts.filter((item) => {
-      // App Filter
+    // 1. [🎫 배달/치킨 쿠폰] 탭: 오픈마켓/기프티콘 쿠폰 전체가 빠짐없이 할인율 높은순으로 노출 (배달앱 필터 영향 없음)
+    if (selectedMainTab === 'coupon') {
+      let couponList = discounts.filter((item) => item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon');
+      
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        couponList = couponList.filter((item) =>
+          item.brand.toLowerCase().includes(query) ||
+          item.app.toLowerCase().includes(query) ||
+          (item.title && item.title.toLowerCase().includes(query)) ||
+          item.discount.toLowerCase().includes(query)
+        );
+      }
+
+      return couponList.sort((a, b) => (b.discountRate || 0) - (a.discountRate || 0));
+    }
+
+    // 2. [🥘 밀키트 특가] 탭: 배달앱 선택(배민/요기요 등)과 완전히 독립되어 카테고리(한식/중식/양식 등)별 밀키트 전체 노출
+    if (selectedMainTab === 'mealkit') {
+      let mealkitList = discounts.filter((item) => isMealkitItem(item));
+
+      // 서브 카테고리 필터
+      if (selectedMealkitCategory && selectedMealkitCategory !== 'all' && selectedMealkitCategory !== '전체') {
+        if (selectedMealkitCategory === 'korean') {
+          mealkitList = mealkitList.filter((item) => item.category === 'korean' || item.category?.includes('한식'));
+        } else if (selectedMealkitCategory === 'chinese') {
+          mealkitList = mealkitList.filter((item) => item.category === 'chinese' || item.category?.includes('중식'));
+        } else if (selectedMealkitCategory === 'western') {
+          mealkitList = mealkitList.filter((item) => item.category === 'western' || item.category?.includes('양식'));
+        } else {
+          mealkitList = mealkitList.filter((item) => item.category === selectedMealkitCategory || item.category?.includes(selectedMealkitCategory));
+        }
+      }
+
+      // 검색어 필터
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        mealkitList = mealkitList.filter((item) =>
+          item.brand.toLowerCase().includes(query) ||
+          (item.title && item.title.toLowerCase().includes(query)) ||
+          item.discount.toLowerCase().includes(query) ||
+          (item.category || '').toLowerCase().includes(query)
+        );
+      }
+
+      // 할인율 높은순 정렬
+      return mealkitList.sort((a, b) => (b.discountRate || 0) - (a.discountRate || 0));
+    }
+
+    // 3. [🎁 배달앱 혜택 한눈에] 탭: 배달앱(배민/요기요/쿠팡이츠 등)의 공식 이벤트/할인/무료배송 혜택만 모아서 표시
+    const list = discounts.filter((item) => {
+      const isMealkit = isMealkitItem(item);
+      const isCoupon = item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon';
+
+      // 밀키트와 금액권 쿠폰은 일반 배달혜택 목록에서 제외
+      if (isMealkit || isCoupon) return false;
+
+      // 배달앱 필터
       if (selectedApp !== '전체' && item.app !== selectedApp) {
         return false;
       }
-      // Category Filter
-      if (selectedCategory !== '전체' && item.category !== selectedCategory) {
+      // 카테고리 필터
+      if (
+        selectedCategory !== '전체' &&
+        item.category !== selectedCategory &&
+        item.category !== 'korean' &&
+        item.category !== 'chinese' &&
+        item.category !== 'western'
+      ) {
         return false;
       }
-      // Search query
+      // 검색어 필터
       if (searchQuery.trim() !== '') {
         const query = searchQuery.toLowerCase();
         const matchBrand = item.brand.toLowerCase().includes(query);
         const matchApp = item.app.toLowerCase().includes(query);
         const matchCategory = (item.category || '').toLowerCase().includes(query);
         const matchDiscount = item.discount.toLowerCase().includes(query);
-        return matchBrand || matchApp || matchCategory || matchDiscount;
+        const matchRegion = (item.region || '').toLowerCase().includes(query);
+        return matchBrand || matchApp || matchCategory || matchDiscount || matchRegion;
       }
       return true;
     });
-  }, [discounts, selectedApp, selectedCategory, searchQuery]);
+
+    return list.sort((a, b) => (b.discountRate || 0) - (a.discountRate || 0));
+  }, [discounts, selectedMainTab, selectedMealkitCategory, selectedApp, selectedCategory, searchQuery, userAddress, userRegionKeyword]);
 
   // Count by app for tab badges
   const appCounts = useMemo(() => {
@@ -828,68 +1194,81 @@ export default function App() {
     showToast(`📋 쿠폰코드 '${code}' 복사 완료!`);
   };
 
-  // Launch App handler with Deep Linking & Store Fallback (PC & Mobile Support)
+  // URL Path Router State (Next.js App Router style URL navigation support for /deal/:id)
+  const [currentPath, setCurrentPath] = useState<string>(() => {
+    return typeof window !== 'undefined' ? window.location.pathname : '/';
+  });
+
+  useEffect(() => {
+    const onPopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const navigateToDeal = (id: string) => {
+    const targetPath = `/deal/${id}`;
+    window.history.pushState({ dealId: id }, '', targetPath);
+    setCurrentPath(targetPath);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleGoBack = () => {
+    window.history.pushState({}, '', '/');
+    setCurrentPath('/');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const activeDealId = useMemo(() => {
+    if (currentPath.startsWith('/deal/')) {
+      return currentPath.replace('/deal/', '');
+    }
+    return null;
+  }, [currentPath]);
+
+  const selectedDealItem = useMemo(() => {
+    if (!activeDealId) return null;
+    const foundInState = discounts.find((d) => String(d.id) === String(activeDealId));
+    if (foundInState) return foundInState;
+    return INITIAL_DISCOUNTS.find((d) => String(d.id) === String(activeDealId)) || null;
+  }, [activeDealId, discounts]);
+
+  // Launch App Handler -> Navigates to Internal Deal Detail Page
   const handleLaunchApp = (item: DiscountItem) => {
-    const config = APP_THEMES[item.app as keyof typeof APP_THEMES] || APP_THEMES['배민'];
-    const userAgent = navigator.userAgent.toLowerCase();
-    const isAndroid = /android/i.test(userAgent);
-    const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-    const isMobile = isAndroid || isIOS;
-
-    const customAffiliate = affiliateUrls[item.app];
-    const affiliateTarget = customAffiliate || item.affiliate_link;
-    const fallbackUrl = affiliateTarget || config.webUrl;
-
-    if (item.couponCode) {
-      navigator.clipboard.writeText(item.couponCode);
-      showToast(`📋 쿠폰코드 '${item.couponCode}' 복사 완료! ${isMobile ? `${config.name} 앱 실행 중...` : 'PC 웹 제휴 수익 링크로 이동합니다.'}`);
-    } else {
-      showToast(isMobile ? `🚀 ${config.name} 모바일 앱으로 이동 중...` : `💻 ${config.name} PC 웹사이트/제휴 수익 링크로 이동 중...`);
-    }
-
-    // 1. Android Deep Link via Intent (opens app if installed; falls back to Affiliate Link / Play Store)
-    if (isAndroid) {
-      const schemeClean = config.scheme.replace('://', '');
-      const storeFallback = affiliateTarget || config.playStoreUrl;
-      const intentUrl = `intent://main#Intent;scheme=${schemeClean};package=${config.packageName};S.browser_fallback_url=${encodeURIComponent(storeFallback)};end;`;
-      window.location.href = intentUrl;
-      return;
-    }
-
-    // 2. iOS Deep Link with Timeout Fallback to App Store / Affiliate Link
-    if (isIOS) {
-      const startTime = Date.now();
-      let hasPageHidden = false;
-
-      const handleVisibilityChange = () => {
-        if (document.hidden) {
-          hasPageHidden = true;
-        }
-      };
-
-      document.addEventListener('visibilitychange', handleVisibilityChange, { once: true });
-      window.addEventListener('pagehide', () => { hasPageHidden = true; }, { once: true });
-
-      // Attempt launching app via URI scheme
-      window.location.href = config.scheme;
-
-      setTimeout(() => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        // If app wasn't launched (browser remained visible), fallback to Affiliate Link or App Store
-        if (!hasPageHidden && (Date.now() - startTime < 2500)) {
-          window.location.href = affiliateTarget || config.appStoreUrl;
-        }
-      }, 1500);
-      return;
-    }
-
-    // 3. PC (Desktop) / Non-mobile Web Browser -> Open Official Web / Affiliate Link in New Tab
-    setTimeout(() => {
-      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
-    }, 400);
+    navigateToDeal(item.id);
   };
 
   const categories = ['전체', '치킨', '피자', '버거', '분식/야식', '카페/디저트', '한식/기타'];
+
+  // Detail Page Route Rendering (/deal/:id)
+  if (currentPath.startsWith('/deal/')) {
+    if (selectedDealItem) {
+      return (
+        <DealDetailPage
+          item={selectedDealItem}
+          onBack={handleGoBack}
+          onCopyCoupon={handleCopyCoupon}
+        />
+      );
+    } else {
+      return (
+        <div className="min-h-screen max-w-md mx-auto bg-slate-50 flex flex-col items-center justify-center p-6 text-center space-y-4 font-sans border-x border-slate-200">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-500">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">존재하지 않거나 만료된 특가 상품입니다.</h2>
+          <p className="text-xs text-slate-500">요청하신 특가 상품 정보를 찾을 수 없습니다.</p>
+          <button
+            onClick={handleGoBack}
+            className="px-5 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl shadow-md hover:bg-slate-800 transition-all cursor-pointer"
+          >
+            특가 목록으로 돌아가기
+          </button>
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-slate-50 flex flex-col justify-between shadow-2xl relative overflow-hidden font-sans border-x border-slate-200/60">
@@ -1057,68 +1436,372 @@ export default function App() {
           )}
         </div>
 
-        {/* Delivery App Filter Tabs (전국 공통 & 지역 특화 배달앱) */}
-        <div className="flex space-x-1.5 overflow-x-auto no-scrollbar py-1">
-          {(['전체', '배민', '쿠팡이츠', '요기요', '땡겨요', '먹깨비', '두잇', '배달특급', '대구로', '동백통'] as DeliveryApp[]).map((app) => {
-            const isSelected = selectedApp === app;
-            const count = appCounts[app] || 0;
-            const theme = APP_THEMES[app as keyof typeof APP_THEMES];
-            let activeStyle = 'bg-slate-900 text-white font-bold shadow-xs';
-            
-            if (isSelected && theme) {
-              activeStyle = `${theme.badgeBg} text-white font-bold shadow-xs`;
-            }
-
-            return (
-              <button
-                key={app}
-                onClick={() => setSelectedApp(app)}
-                className={`px-3.5 py-2 rounded-xl text-xs transition-all whitespace-nowrap flex items-center space-x-1.5 shrink-0 active:scale-95 ${
-                  isSelected
-                    ? activeStyle
-                    : 'bg-slate-100 text-slate-600 font-medium hover:bg-slate-200/80'
-                }`}
-              >
-                <span>{app}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-white/20 text-white' : 'bg-slate-200/70 text-slate-500'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Category Filter Chips */}
-        <div className="flex space-x-1 overflow-x-auto no-scrollbar pt-2 border-t border-slate-100/80 mt-2">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] whitespace-nowrap transition-colors shrink-0 ${
-                selectedCategory === cat
-                  ? 'bg-blue-50 text-blue-600 font-bold border border-blue-200'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </header>
-
-      {/* MAIN CONTENT AREA */}
-      <main className="flex-1 px-4 py-4 space-y-3 overflow-y-auto">
-        {/* [TOP DELIVERY APP ROLLING BANNER & ACCORDION / TAB DRAWER] */}
+        {/* Delivery App Rolling Banner & Accordion (배달앱 공식 이벤트/혜택) */}
         <DeliveryAppRollingBanner
           selectedAppFilter={selectedApp !== '전체' ? selectedApp : undefined}
           onSelectAppFilter={(appId) => {
             setSelectedApp(appId as DeliveryApp);
           }}
+          discounts={discounts.filter((item) => !isMealkitItem(item))}
+          onLaunchApp={handleLaunchApp}
+          onCopyCoupon={handleCopyCoupon}
+          isAdmin={isAdmin}
+          onOpenEditModal={openRegisterModal}
+          userRegionKeyword={userRegionKeyword}
+          userAddress={userAddress}
         />
+
+        {/* MAIN CATEGORY TABS (Requirement #1 & #2: [🍲 밀키트 특가] & [🎫 배달/치킨 쿠폰] 메인 탭 및 일체형 음식종류별 검색) */}
+        <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80 my-2.5 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setSelectedMainTab('mealkit')}
+              className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center space-x-1.5 transition-all active:scale-95 border ${
+                selectedMainTab === 'mealkit'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-500 shadow-md ring-2 ring-amber-300/50'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs'
+              }`}
+            >
+              <span className="text-base sm:text-lg">🍲</span>
+              <span>밀키트 특가</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                selectedMainTab === 'mealkit' ? 'bg-black/25 text-white' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {mealkitCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setSelectedMainTab('coupon')}
+              className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center space-x-1.5 transition-all active:scale-95 border ${
+                selectedMainTab === 'coupon'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-600 shadow-md ring-2 ring-blue-300/50'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs'
+              }`}
+            >
+              <span className="text-base sm:text-lg">🎫</span>
+              <span>배달/치킨 쿠폰</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                selectedMainTab === 'coupon' ? 'bg-black/25 text-white' : 'bg-blue-100 text-blue-800'
+              }`}>
+                {couponCount}
+              </span>
+            </button>
+          </div>
+
+          {/* 밀키트 특가 안으로 들어간 밀키트 음식 종류별 검색 서브탭 */}
+          {selectedMainTab === 'mealkit' && (
+            <div className="bg-amber-500/10 border border-amber-300/70 rounded-xl p-2.5 space-y-2">
+              <div className="flex items-center justify-between px-0.5">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs">🍲</span>
+                  <span className="text-xs font-black text-amber-950">밀키트 음식 종류별 검색</span>
+                </div>
+                <span className="text-[10px] text-amber-900 bg-amber-200 font-extrabold px-2 py-0.5 rounded-full border border-amber-300">
+                  🔥 할인율 높은순 정렬
+                </span>
+              </div>
+
+              {/* Subcategory buttons: [전체], [한식], [중식], [양식] */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { id: 'all', label: '전체', icon: '✨' },
+                  { id: 'korean', label: '한식', icon: '🍚' },
+                  { id: 'chinese', label: '중식', icon: '🥢' },
+                  { id: 'western', label: '양식', icon: '🍝' },
+                ].map((tab) => {
+                  const isSelected = selectedMealkitCategory === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setSelectedMealkitCategory(tab.id as any)}
+                      className={`py-2 px-1 rounded-lg text-xs font-black flex items-center justify-center space-x-1 transition-all active:scale-95 border ${
+                        isSelected
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-300/60'
+                          : 'bg-white hover:bg-amber-100/80 text-amber-950 border-amber-200'
+                      }`}
+                    >
+                      <span className="text-sm">{tab.icon}</span>
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+
+      </header>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 px-4 py-4 space-y-3 overflow-y-auto">
+
+        {/* MEALKIT SPECIAL DISCOUNT LIST (Ranked by Discount Rate) */}
+        {selectedMainTab === 'mealkit' && (
+          <div className="space-y-2.5 pt-2">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
+                <span className="text-amber-500 text-sm">🔥</span>
+                <span>
+                  {selectedMealkitCategory === 'korean'
+                    ? '한식'
+                    : selectedMealkitCategory === 'chinese'
+                    ? '중식'
+                    : selectedMealkitCategory === 'western'
+                    ? '양식'
+                    : '전체'}{' '}
+                  밀키트 특가 (할인율 높은순)
+                </span>
+              </h3>
+              <span className="text-[10px] bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full border border-amber-200/60">
+                총 {filteredDiscounts.length}개 상품
+              </span>
+            </div>
+
+            {filteredDiscounts.length === 0 ? (
+              <div className="bg-white rounded-2xl p-6 text-center text-xs text-slate-400 border border-slate-200">
+                해당 카테고리의 밀키트 특가 상품이 없습니다.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2.5">
+                {filteredDiscounts.map((item, index) => {
+                  const categoryName =
+                    item.category === 'korean'
+                      ? '한식'
+                      : item.category === 'chinese'
+                      ? '중식'
+                      : item.category === 'western'
+                      ? '양식'
+                      : item.category || '밀키트';
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => navigateToDeal(item.id)}
+                      className="bg-white rounded-2xl p-3.5 border border-amber-200/80 shadow-2xs hover:shadow-md transition-all space-y-2 relative overflow-hidden cursor-pointer"
+                    >
+                      {/* Top Rank & Discount Badge */}
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-slate-900 text-white">
+                              TOP {index + 1}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300/60">
+                              {categoryName}
+                            </span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              {item.app}
+                            </span>
+                          </div>
+
+                          <h4 className="font-black text-slate-900 text-xs sm:text-sm pt-0.5 leading-snug">
+                            {item.brand}
+                          </h4>
+                        </div>
+
+                        {/* Big Discount Rate Tag */}
+                        {item.discountRate && (
+                          <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white px-2.5 py-1 rounded-xl font-black text-xs sm:text-sm shadow-xs shrink-0 flex items-center space-x-0.5 ml-2">
+                            <span>🔥 {item.discountRate}% OFF</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Price & Minimum Order */}
+                      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
+                        <div>
+                          <span className="font-black text-red-500 text-sm">{item.discount}</span>
+                          {item.minOrder && (
+                            <span className="text-[10px] text-slate-400 font-medium ml-1.5">
+                              ({item.minOrder})
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigateToDeal(item.id);
+                          }}
+                          className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-xs rounded-xl shadow-xs hover:brightness-105 active:scale-95 transition-all flex items-center space-x-1 cursor-pointer"
+                        >
+                          <span>특가 상세보기 &gt;</span>
+                        </button>
+                      </div>
+
+                      {/* Coupon Code & Note */}
+                      {(item.couponCode || item.linkNote) && (
+                        <div className="bg-amber-50/60 p-2 rounded-xl border border-amber-100 text-[10px] space-y-1 mt-1">
+                          {item.couponCode && (
+                            <div className="flex items-center justify-between text-slate-800">
+                              <div className="flex items-center space-x-1 font-mono font-bold">
+                                <span className="text-[10px] text-slate-400 font-sans">쿠폰코드:</span>
+                                <span className="text-amber-800 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200">
+                                  {item.couponCode}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleCopyCoupon(item.couponCode!)}
+                                className="px-2 py-0.5 bg-white border border-amber-200 rounded text-[10px] font-bold text-amber-800 hover:bg-amber-50 flex items-center space-x-0.5"
+                              >
+                                <Copy className="w-2.5 h-2.5" />
+                                <span>복사</span>
+                              </button>
+                            </div>
+                          )}
+                          {item.linkNote && (
+                            <p className="text-[10px] text-amber-900/80 font-medium">
+                              💡 {item.linkNote}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DELIVERY / CHICKEN COUPONS LIST (Ranked by Discount Rate) */}
+        {selectedMainTab === 'coupon' && (
+          <div className="space-y-2.5 pt-2">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
+                <span className="text-blue-600 text-sm">🎫</span>
+                <span>실시간 배달/치킨 쿠폰 & 금액권 특가 (할인율 높은순)</span>
+              </h3>
+              <span className="text-[10px] bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full border border-blue-200/60">
+                총 {filteredDiscounts.length}개 핫딜
+              </span>
+            </div>
+
+            {filteredDiscounts.length === 0 ? (
+              <div className="bg-white rounded-2xl p-6 text-center text-xs text-slate-400 border border-slate-200">
+                현재 등록된 배달/치킨 쿠폰 특가 정보가 없습니다.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2.5">
+                {filteredDiscounts.map((item, index) => {
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => navigateToDeal(item.id)}
+                      className="bg-white rounded-2xl p-3.5 border border-blue-200/80 shadow-2xs hover:shadow-md transition-all space-y-2.5 relative overflow-hidden cursor-pointer"
+                    >
+                      {/* Top Rank & Badges */}
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-blue-600 text-white">
+                              BEST {index + 1}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-900 border border-blue-200/60">
+                              {item.brand}
+                            </span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              {item.app}
+                            </span>
+                            {item.seller && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200/60">
+                                🛒 {item.seller}
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="font-black text-slate-900 text-xs sm:text-sm pt-0.5 leading-snug">
+                            {item.title || item.brand}
+                          </h4>
+                        </div>
+
+                        {/* Discount Rate Badge */}
+                        {item.discountRate && (
+                          <div className="bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-xl font-black text-xs sm:text-sm shadow-xs shrink-0 flex items-center space-x-0.5 ml-2">
+                            <span>🔥 {item.discountRate}% OFF</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Image Preview (if present) */}
+                      {item.imageUrl && (
+                        <div className="relative w-full h-28 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/60">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.title}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+
+                      {/* Price & Buying Button */}
+                      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
+                        <div className="space-y-0.5">
+                          <div className="flex items-baseline space-x-1.5">
+                            <span className="font-black text-red-600 text-sm sm:text-base">
+                              {item.discountPrice ? `${item.discountPrice.toLocaleString()}원` : item.discount}
+                            </span>
+                            {item.originalPrice && item.originalPrice > (item.discountPrice || 0) && (
+                              <span className="text-[11px] text-slate-400 line-through">
+                                {item.originalPrice.toLocaleString()}원
+                              </span>
+                            )}
+                          </div>
+                          {item.validity && (
+                            <p className="text-[10px] text-slate-400">
+                              ⏱️ {item.validity}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigateToDeal(item.id);
+                          }}
+                          className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-xs rounded-xl shadow-xs hover:brightness-105 active:scale-95 transition-all flex items-center space-x-1 shrink-0 cursor-pointer"
+                        >
+                          <span>특가 상세보기 &gt;</span>
+                        </button>
+                      </div>
+
+                      {/* Coupon Note & Code */}
+                      {(item.couponCode || item.linkNote) && (
+                        <div className="bg-blue-50/60 p-2 rounded-xl border border-blue-100 text-[10px] space-y-1 mt-1">
+                          {item.couponCode && (
+                            <div className="flex items-center justify-between text-slate-800">
+                              <div className="flex items-center space-x-1 font-mono font-bold">
+                                <span className="text-[10px] text-slate-400 font-sans">쿠폰코드:</span>
+                                <span className="text-blue-900 bg-blue-100 px-1.5 py-0.2 rounded border border-blue-200">
+                                  {item.couponCode}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => handleCopyCoupon(item.couponCode!)}
+                                className="px-2 py-0.5 bg-white border border-blue-200 rounded text-[10px] font-bold text-blue-800 hover:bg-blue-50 flex items-center space-x-0.5"
+                              >
+                                <Copy className="w-2.5 h-2.5" />
+                                <span>복사</span>
+                              </button>
+                            </div>
+                          )}
+                          {item.linkNote && (
+                            <p className="text-[10px] text-blue-900/80 font-medium">
+                              💡 {item.linkNote}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* [TOP AD BANNER AREA - Google AdSense / Kakao AdFit] */}
         <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-2.5 text-center flex flex-col items-center justify-center text-slate-400 text-xs">
@@ -1126,204 +1809,7 @@ export default function App() {
           <p className="text-[10px] text-slate-300">구글 애드센스 / 카카오 애드핏 디스플레이 광고 코드 영역</p>
         </div>
 
-        {/* Total Count & Filter Summary */}
-        <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-          <div>
-            총 <span className="font-bold text-slate-900">{filteredDiscounts.length}</span>개의 할인
-            {selectedApp !== '전체' && (
-              <span className="ml-1 text-blue-600 font-semibold">[{selectedApp}]</span>
-            )}
-            {selectedCategory !== '전체' && (
-              <span className="ml-1 text-slate-700">({selectedCategory})</span>
-            )}
-          </div>
-          {isAdmin && (
-            <button
-              onClick={() => openRegisterModal()}
-              className="text-blue-600 font-bold flex items-center space-x-1 hover:underline"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>할인 직접 등록</span>
-            </button>
-          )}
-        </div>
 
-        {/* TOP 3 RANKED BANNER SECTION */}
-        {filteredDiscounts.some((item) => item.is_top_ranked) && (
-          <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 rounded-2xl p-3.5 text-white shadow-md border border-amber-300 relative overflow-hidden">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-black text-xs uppercase tracking-wider flex items-center space-x-1">
-                <span>🔥 오늘만 역대급 할인 TOP 3!</span>
-              </span>
-              <span className="text-[10px] bg-black/20 backdrop-blur-xs px-2 py-0.5 rounded-full font-bold">
-                AI 랭킹 자동 선정
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-2">
-              {filteredDiscounts
-                .filter((item) => item.is_top_ranked)
-                .slice(0, 3)
-                .map((topItem, index) => (
-                  <div
-                    key={topItem.id}
-                    onClick={() => handleLaunchApp(topItem)}
-                    className="bg-white/95 text-slate-900 rounded-xl p-2.5 flex items-center justify-between cursor-pointer hover:bg-white transition-all active:scale-98 shadow-xs"
-                  >
-                    <div className="flex items-center space-x-2 min-w-0">
-                      <span className="w-5 h-5 rounded-full bg-amber-500 text-white font-extrabold text-[11px] flex items-center justify-center shrink-0">
-                        {index + 1}
-                      </span>
-                      <div className="truncate">
-                        <p className="font-bold text-xs truncate">{topItem.brand}</p>
-                        <p className="text-[10px] text-amber-700 font-extrabold">{topItem.discount}</p>
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-lg shrink-0 flex items-center">
-                      <span>앱으로 이동</span>
-                      <ChevronRight className="w-3 h-3 ml-0.5" />
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Discount Card List (Requirement #2) */}
-        {filteredDiscounts.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 text-center border border-slate-100 shadow-xs my-6">
-            <ShoppingBag className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-700">해당 조건의 할인이 없습니다.</p>
-            <p className="text-xs text-slate-400 mt-1">
-              다른 탭을 선택하거나 검색어를 변경해 보세요.
-            </p>
-            {isAdmin && (
-              <button
-                onClick={() => openRegisterModal()}
-                className="mt-4 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition-all inline-flex items-center space-x-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>새 할인 등록하기</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          filteredDiscounts.map((item) => {
-            const theme = APP_THEMES[item.app];
-
-            return (
-              <div
-                key={item.id}
-                className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs hover:shadow-md transition-all relative overflow-hidden group"
-              >
-                {/* Delivery App Color Accent Strip (Requirement #2: 배달 앱 로고 색상의 띠) */}
-                <div
-                  className={`absolute top-0 left-0 bottom-0 w-1.5 ${theme.badgeBg}`}
-                />
-
-                <div className="pl-2.5">
-                  {/* Top Bar: App Badge & Category Tag & Admin Actions */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <span
-                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${theme.badgeBg} ${theme.badgeText}`}
-                      >
-                        {item.app}
-                      </span>
-
-                      {item.category && (
-                        <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                          {item.category}
-                        </span>
-                      )}
-
-                      {item.minOrder && (
-                        <span className="text-[11px] text-slate-400 hidden sm:inline-block">
-                          {item.minOrder}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Admin Action Buttons on Card */}
-                    {isAdmin && (
-                      <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg">
-                        <button
-                          onClick={() => openRegisterModal(item)}
-                          className="p-1 text-slate-600 hover:text-blue-600 hover:bg-white rounded transition-colors"
-                          title="수정"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item.id, item.brand)}
-                          className="p-1 text-slate-600 hover:text-red-600 hover:bg-white rounded transition-colors"
-                          title="삭제"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Main Info: Brand & Discount Amount & Button */}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      {/* Brand Name & brand_id tag */}
-                      <div className="flex items-center space-x-1.5">
-                        <h3 className="text-base font-extrabold text-slate-900 truncate tracking-tight">
-                          {item.brand}
-                        </h3>
-                        {item.brand_id && (
-                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
-                            {item.brand_id}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Discount Amount (Highlight) */}
-                      <div className="text-lg font-black text-slate-900 mt-0.5 tracking-tight flex items-baseline space-x-1">
-                        <span className="text-red-500">{item.discount}</span>
-                      </div>
-
-                      {/* Card / Payment Extra Discount (🔥 혜택 더하기) */}
-                      {item.card_discount && item.card_discount !== '없음' && (
-                        <div className="mt-1.5 bg-blue-50/90 border border-blue-200/80 rounded-xl px-2.5 py-1 text-[11px] text-blue-700 font-bold flex items-center space-x-1 w-fit">
-                          <span>🔥 혜택 더하기: {item.card_discount}</span>
-                        </div>
-                      )}
-
-                      {/* Validity text + Condition Tag */}
-                      <div className="flex items-center space-x-2 mt-1.5">
-                        <span className="inline-flex items-center text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
-                          <Check className="w-3 h-3 mr-0.5 text-emerald-600" />
-                          {item.validity || '오늘 하루만 유효'}
-                        </span>
-                        {item.minOrder && (
-                          <span className="text-[11px] text-slate-400 truncate">
-                            ({item.minOrder})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right Action Button */}
-                    <div className="flex flex-col items-end justify-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleLaunchApp(item);
-                        }}
-                        className={`px-3.5 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-xs active:scale-95 flex items-center space-x-0.5 shrink-0 ${theme.btnBg}`}
-                      >
-                        <span>앱으로 이동</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
 
         {/* Quick Admin Action or Reset if data modified */}
         {isAdmin && (
@@ -1762,16 +2248,16 @@ export default function App() {
 
                 {/* Launch Button */}
                 <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      handleLaunchApp(activeModalItem);
-                      setActiveModalItem(null);
-                    }}
+                  <a
+                    href={activeModalItem.affiliate_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className={`w-full py-3.5 rounded-xl font-bold text-white shadow-md flex items-center justify-center space-x-1.5 active:scale-95 transition-transform ${theme.btnBg}`}
+                    onClick={() => setActiveModalItem(null)}
                   >
                     <ExternalLink className="w-4 h-4" />
-                    <span>{theme.name} 앱 바로가기</span>
-                  </button>
+                    <span>{theme.name} 특가 구매하러 가기</span>
+                  </a>
 
                   <button
                     onClick={() => setActiveModalItem(null)}
