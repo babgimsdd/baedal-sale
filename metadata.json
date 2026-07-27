@@ -1,6 +1,6 @@
 {
-  "name": "오늘의 배달 앱 통합 할인 나침반",
-  "description": "스마트폰 화면에 최적화된 배달 4사(배민, 쿠팡이츠, 요기요, 땡겨요) 통합 할인 정보 모음 및 비공개 관리자 등록 시스템",
-  "requestFramePermissions": [],
+  "name": "대한민국 배달 할인 허브",
+  "description": "대한민국의 주요 배달 서비스 할인, 쿠폰, 무료배달, 카드 혜택 정보를 한곳에서 모아보는 통합 플랫폼",
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
