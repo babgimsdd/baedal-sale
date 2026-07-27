@@ -41,16 +41,27 @@ export interface DiscountItem {
   id: string;
   app: string;
   brand: string;
+  title?: string;
+  name?: string;
   brand_id?: string;
   discount: string;
+  price?: string | number;
+  originalPrice?: number;
+  discountPrice?: number;
   discountRate?: number; // 할인율 (숫자, 예: 50 = 50%)
   validity: string;
   minOrder?: string;
   category?: string; // 'korean' | 'chinese' | 'western' | 기타
-  category_type?: 'mealkit' | 'coupon';
+  category_type?: 'mealkit' | 'coupon' | string;
+  type?: string;
   region?: string;
   card_discount?: string;
   affiliate_link?: string;
+  url?: string;
+  link?: string;
+  imageUrl?: string;
+  image?: string;
+  seller?: string;
   is_top_ranked?: boolean;
   couponCode?: string;
   linkNote?: string;
@@ -495,70 +506,91 @@ export default function App() {
   const [isRefreshingLive, setIsRefreshingLive] = useState(false);
   const [lastUpdatedTime, setLastUpdatedTime] = useState<string | null>(null);
 
-  // Fetch Live Updated Discounts, Coupons & Mealkits JSON from Server/GitHub
+  // Safe JSON Fetcher Helper to handle Vercel HTML rewrites / 404s gracefully
+  const fetchJsonSafely = async <T,>(url: string): Promise<T | null> => {
+    try {
+      const res = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`);
+      if (!res.ok) return null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) return null;
+      const data = await res.json();
+      return data as T;
+    } catch {
+      return null;
+    }
+  };
+
+  // Fetch Live Updated Discounts, Coupons & Mealkits JSON from Server/GitHub/Public Data
   const fetchLiveDiscounts = async (silent = false) => {
     try {
       if (!silent) setIsRefreshingLive(true);
-      
+
       // 1. Fetch general delivery app discounts
       let generalDiscounts: DiscountItem[] = [];
-      try {
-        const res = await fetch(`/discounts.json?t=${Date.now()}`);
-        if (res.ok) {
-          generalDiscounts = await res.json();
-        } else {
-          generalDiscounts = INITIAL_DISCOUNTS;
-        }
-      } catch {
+      const discData =
+        (await fetchJsonSafely<DiscountItem[]>('/data/discounts.json')) ||
+        (await fetchJsonSafely<DiscountItem[]>('/discounts.json'));
+      if (Array.isArray(discData) && discData.length > 0) {
+        generalDiscounts = discData;
+      } else {
         generalDiscounts = INITIAL_DISCOUNTS;
       }
 
       // 2. Fetch live open market coupons (배민/요기요 금액권 & 치킨 기프티콘)
       let liveCoupons: DiscountItem[] = [];
-      try {
-        const couponsRes = await fetch(`/api/coupons?t=${Date.now()}`);
-        if (couponsRes.ok) {
-          const json = await couponsRes.json();
-          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            liveCoupons = json.data;
-          }
+      const couponApiRes = await fetchJsonSafely<{ success?: boolean; data?: DiscountItem[] }>('/api/coupons');
+      if (couponApiRes && couponApiRes.success && Array.isArray(couponApiRes.data) && couponApiRes.data.length > 0) {
+        liveCoupons = couponApiRes.data;
+      }
+      if (liveCoupons.length === 0) {
+        const staticCoupons =
+          (await fetchJsonSafely<DiscountItem[]>('/data/coupons.json')) ||
+          (await fetchJsonSafely<DiscountItem[]>('/coupons.json'));
+        if (Array.isArray(staticCoupons) && staticCoupons.length > 0) {
+          liveCoupons = staticCoupons;
         }
-        if (liveCoupons.length === 0) {
-          const staticCouponRes = await fetch(`/coupons.json?t=${Date.now()}`);
-          if (staticCouponRes.ok) {
-            const list = await staticCouponRes.json();
-            if (Array.isArray(list)) liveCoupons = list;
-          }
-        }
-      } catch (couponErr) {
-        console.log('Live coupon API fetch fallback:', couponErr);
       }
 
       // 3. Fetch live scraped mealkits
       let liveMealkits: DiscountItem[] = [];
-      try {
-        const mealkitsRes = await fetch(`/api/mealkits?t=${Date.now()}`);
-        if (mealkitsRes.ok) {
-          const json = await mealkitsRes.json();
-          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            liveMealkits = json.data;
-          }
+      const mealkitApiRes = await fetchJsonSafely<{ success?: boolean; data?: DiscountItem[] }>('/api/mealkits');
+      if (mealkitApiRes && mealkitApiRes.success && Array.isArray(mealkitApiRes.data) && mealkitApiRes.data.length > 0) {
+        liveMealkits = mealkitApiRes.data;
+      }
+      if (liveMealkits.length === 0) {
+        const staticMealkits =
+          (await fetchJsonSafely<DiscountItem[]>('/data/mealkits.json')) ||
+          (await fetchJsonSafely<DiscountItem[]>('/mealkits.json'));
+        if (Array.isArray(staticMealkits) && staticMealkits.length > 0) {
+          liveMealkits = staticMealkits;
         }
-        if (liveMealkits.length === 0) {
-          const staticMealkitRes = await fetch(`/mealkits.json?t=${Date.now()}`);
-          if (staticMealkitRes.ok) {
-            const list = await staticMealkitRes.json();
-            if (Array.isArray(list)) liveMealkits = list;
-          }
-        }
-      } catch (mealkitErr) {
-        console.log('Live mealkit API fetch fallback:', mealkitErr);
       }
 
-      // Merge all items uniquely by ID to preserve general discounts, coupons, and mealkits
+      // Normalize items and merge by ID
       const map = new Map<string, DiscountItem>();
-      [...generalDiscounts, ...liveCoupons, ...liveMealkits].forEach((item) => {
-        if (item && item.id) {
+      const normalizeItem = (raw: any): DiscountItem => {
+        const brand = raw.brand || raw.name || raw.title || '특가 상품';
+        const title = raw.title || raw.name || raw.brand || '특가 상품';
+        const discountStr = raw.discount || (raw.discountPrice ? `${raw.discountPrice.toLocaleString()}원 할인` : '특가 할인');
+        const affiliateUrl = raw.affiliate_link || raw.url || raw.link || 'https://www.coupang.com';
+        const imgUrl = raw.imageUrl || raw.image;
+
+        return {
+          ...raw,
+          id: String(raw.id || `item-${Math.random()}`),
+          brand,
+          title,
+          discount: discountStr,
+          validity: raw.validity || '오늘 하루만 유효',
+          affiliate_link: affiliateUrl,
+          imageUrl: imgUrl,
+          createdAt: raw.createdAt || Date.now(),
+        };
+      };
+
+      [...generalDiscounts, ...liveCoupons, ...liveMealkits].forEach((raw) => {
+        if (raw) {
+          const item = normalizeItem(raw);
           map.set(item.id, item);
         }
       });
@@ -860,17 +892,39 @@ export default function App() {
 
   // Helper to distinguish mealkit items from delivery app coupons
   const isMealkitItem = (item: DiscountItem) => {
+    if (!item) return false;
+    if (item.category_type === 'mealkit' || item.type === 'mealkit') return true;
+    if (item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon') return false;
+
+    const brand = item.brand || '';
+    const title = item.title || '';
     return (
-      item.category_type === 'mealkit' ||
-      item.brand.includes('밀키트') ||
-      item.brand.includes('쿠팡프레시') ||
-      item.brand.includes('마켓컬리') ||
-      item.brand.includes('CJ더마켓') ||
-      item.brand.includes('프레시') ||
-      item.brand.includes('컬리') ||
+      brand.includes('밀키트') ||
+      title.includes('밀키트') ||
+      brand.includes('쿠팡프레시') ||
+      brand.includes('마켓컬리') ||
+      brand.includes('CJ더마켓') ||
+      brand.includes('프레시') ||
+      brand.includes('컬리') ||
       item.category === 'korean' ||
       item.category === 'chinese' ||
       item.category === 'western'
+    );
+  };
+
+  const isCouponItem = (item: DiscountItem) => {
+    if (!item) return false;
+    if (item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon') return true;
+    if (item.category_type === 'mealkit' || item.type === 'mealkit') return false;
+
+    const brand = item.brand || '';
+    const title = item.title || '';
+    return (
+      brand.includes('금액권') ||
+      title.includes('금액권') ||
+      title.includes('기프티콘') ||
+      title.includes('쿠폰') ||
+      brand.includes('상품권')
     );
   };
 
@@ -880,23 +934,24 @@ export default function App() {
   }, [discounts]);
 
   const couponCount = useMemo(() => {
-    return discounts.filter((item) => item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon').length;
+    return discounts.filter(isCouponItem).length;
   }, [discounts]);
 
   // Filtered List calculation (Reflect user address, main category tabs, subcategories & region)
   const filteredDiscounts = useMemo(() => {
     // 1. [🎫 배달/치킨 쿠폰] 탭: 오픈마켓/기프티콘 쿠폰 전체가 빠짐없이 할인율 높은순으로 노출 (배달앱 필터 영향 없음)
     if (selectedMainTab === 'coupon') {
-      let couponList = discounts.filter((item) => item.category_type === 'coupon' || item.type === 'coupon' || item.category === 'coupon');
+      let couponList = discounts.filter(isCouponItem);
       
       if (searchQuery.trim() !== '') {
         const query = searchQuery.toLowerCase();
-        couponList = couponList.filter((item) =>
-          item.brand.toLowerCase().includes(query) ||
-          item.app.toLowerCase().includes(query) ||
-          (item.title && item.title.toLowerCase().includes(query)) ||
-          item.discount.toLowerCase().includes(query)
-        );
+        couponList = couponList.filter((item) => {
+          const brand = (item.brand || '').toLowerCase();
+          const app = (item.app || '').toLowerCase();
+          const title = (item.title || item.name || '').toLowerCase();
+          const discount = (item.discount || '').toLowerCase();
+          return brand.includes(query) || app.includes(query) || title.includes(query) || discount.includes(query);
+        });
       }
 
       return couponList.sort((a, b) => (b.discountRate || 0) - (a.discountRate || 0));
@@ -1195,13 +1250,36 @@ export default function App() {
   };
 
   // URL Path Router State (Next.js App Router style URL navigation support for /deal/:id)
+  const [activeDealIdState, setActiveDealIdState] = useState<string | null>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/deal/')) {
+      const raw = window.location.pathname.replace('/deal/', '').split('?')[0].split('#')[0];
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+    return null;
+  });
+
   const [currentPath, setCurrentPath] = useState<string>(() => {
     return typeof window !== 'undefined' ? window.location.pathname : '/';
   });
 
   useEffect(() => {
     const onPopState = () => {
-      setCurrentPath(window.location.pathname);
+      const path = window.location.pathname;
+      setCurrentPath(path);
+      if (path.startsWith('/deal/')) {
+        const raw = path.replace('/deal/', '').split('?')[0].split('#')[0];
+        try {
+          setActiveDealIdState(decodeURIComponent(raw));
+        } catch {
+          setActiveDealIdState(raw);
+        }
+      } else {
+        setActiveDealIdState(null);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -1209,30 +1287,97 @@ export default function App() {
 
   const navigateToDeal = (id: string) => {
     const targetPath = `/deal/${id}`;
-    window.history.pushState({ dealId: id }, '', targetPath);
+    if (typeof window !== 'undefined') {
+      try {
+        window.history.pushState({ dealId: id }, '', targetPath);
+      } catch {
+        // Fallback for iFrame restrictions
+      }
+    }
     setCurrentPath(targetPath);
+    setActiveDealIdState(id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleGoBack = () => {
-    window.history.pushState({}, '', '/');
+    if (typeof window !== 'undefined') {
+      try {
+        window.history.pushState({}, '', '/');
+      } catch {
+        // Fallback for iFrame restrictions
+      }
+    }
     setCurrentPath('/');
+    setActiveDealIdState(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const activeDealId = useMemo(() => {
-    if (currentPath.startsWith('/deal/')) {
-      return currentPath.replace('/deal/', '');
-    }
-    return null;
-  }, [currentPath]);
-
   const selectedDealItem = useMemo(() => {
-    if (!activeDealId) return null;
-    const foundInState = discounts.find((d) => String(d.id) === String(activeDealId));
-    if (foundInState) return foundInState;
-    return INITIAL_DISCOUNTS.find((d) => String(d.id) === String(activeDealId)) || null;
-  }, [activeDealId, discounts]);
+    if (!activeDealIdState) return null;
+    const rawTarget = activeDealIdState.trim();
+    const decodedTarget = (() => {
+      try {
+        return decodeURIComponent(rawTarget).trim();
+      } catch {
+        return rawTarget;
+      }
+    })();
+
+    const matchItem = (item: DiscountItem) => {
+      if (!item || !item.id) return false;
+      const itemId = String(item.id).trim().toLowerCase();
+      const rawLower = rawTarget.toLowerCase();
+      const decLower = decodedTarget.toLowerCase();
+
+      return (
+        itemId === rawLower ||
+        itemId === decLower ||
+        encodeURIComponent(itemId).toLowerCase() === rawLower ||
+        itemId === decLower.replace('deal-', '').replace('mk-', '').replace('cp-', '')
+      );
+    };
+
+    // 1. Direct ID match in current discounts state
+    let found = discounts.find(matchItem);
+    if (found) return found;
+
+    // 2. Direct ID match in INITIAL_DISCOUNTS
+    found = INITIAL_DISCOUNTS.find(matchItem);
+    if (found) return found;
+
+    // 3. Match from localStorage saved items backup
+    try {
+      const saved = localStorage.getItem('delivery_compass_discounts_v1');
+      if (saved) {
+        const parsed: DiscountItem[] = JSON.parse(saved);
+        found = parsed.find(matchItem);
+        if (found) return found;
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4. Match by Numeric Index (e.g. /deal/1, /deal/2)
+    const num = Number(decodedTarget);
+    if (!isNaN(num) && num > 0 && num <= discounts.length) {
+      return discounts[num - 1];
+    }
+
+    // 5. Match by Brand / Title keyword match as safety net
+    const cleanTarget = decodedTarget.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+    if (cleanTarget.length > 0) {
+      found = discounts.find((d) => {
+        const brandClean = (d.brand || '').replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+        const titleClean = (d.title || '').replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+        return (brandClean && (cleanTarget.includes(brandClean) || brandClean.includes(cleanTarget))) ||
+               (titleClean && (cleanTarget.includes(titleClean) || titleClean.includes(cleanTarget)));
+      });
+      if (found) return found;
+    }
+
+    // 6. Safe fallback to first discount item if deal ID was provided so user never sees empty redirect screen
+    return discounts[0] || INITIAL_DISCOUNTS[0] || null;
+  }, [activeDealIdState, discounts]);
 
   // Launch App Handler -> Navigates to Internal Deal Detail Page
   const handleLaunchApp = (item: DiscountItem) => {
@@ -1242,7 +1387,7 @@ export default function App() {
   const categories = ['전체', '치킨', '피자', '버거', '분식/야식', '카페/디저트', '한식/기타'];
 
   // Detail Page Route Rendering (/deal/:id)
-  if (currentPath.startsWith('/deal/')) {
+  if (activeDealIdState || currentPath.startsWith('/deal/')) {
     if (selectedDealItem) {
       return (
         <DealDetailPage
@@ -1258,7 +1403,7 @@ export default function App() {
             <AlertCircle className="w-8 h-8" />
           </div>
           <h2 className="text-lg font-black text-slate-900">존재하지 않거나 만료된 특가 상품입니다.</h2>
-          <p className="text-xs text-slate-500">요청하신 특가 상품 정보를 찾을 수 없습니다.</p>
+          <p className="text-xs text-slate-500">요청하신 특가 상품 정보('{activeDealIdState}')를 찾을 수 없습니다.</p>
           <button
             onClick={handleGoBack}
             className="px-5 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl shadow-md hover:bg-slate-800 transition-all cursor-pointer"
@@ -1597,7 +1742,7 @@ export default function App() {
                           </div>
 
                           <h4 className="font-black text-slate-900 text-xs sm:text-sm pt-0.5 leading-snug">
-                            {item.brand}
+                            {item.title || item.brand}
                           </h4>
                         </div>
 
@@ -1608,6 +1753,21 @@ export default function App() {
                           </div>
                         )}
                       </div>
+
+                      {/* Image Preview (if present) */}
+                      {(item.imageUrl || item.image) && (
+                        <div className="relative w-full h-28 rounded-xl overflow-hidden bg-amber-50 border border-amber-200/60">
+                          <img
+                            src={item.imageUrl || item.image}
+                            alt={item.title || item.brand}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
 
                       {/* Price & Minimum Order */}
                       <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
@@ -1726,13 +1886,16 @@ export default function App() {
                       </div>
 
                       {/* Image Preview (if present) */}
-                      {item.imageUrl && (
+                      {(item.imageUrl || item.image) && (
                         <div className="relative w-full h-28 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/60">
                           <img
-                            src={item.imageUrl}
-                            alt={item.title}
+                            src={item.imageUrl || item.image}
+                            alt={item.title || item.brand}
                             className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
                           />
                         </div>
                       )}

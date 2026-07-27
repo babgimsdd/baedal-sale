@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ChevronLeft,
   Copy,
@@ -31,9 +31,44 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
   const [copied, setCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
-  const title = item.title || item.brand;
-  const affiliateUrl = item.affiliate_link || 'https://www.coupang.com';
+  const title = item.title || item.name || item.brand;
+  const affiliateUrl = item.affiliate_link || item.url || item.link || 'https://www.coupang.com';
+  const imageUrl = item.imageUrl || item.image;
   const discountRate = item.discountRate;
+
+  // Dynamic SEO Title, Description, and Open Graph Meta Tag Management
+  useEffect(() => {
+    const defaultTitle = document.title;
+    const pageTitle = `${title} (${item.discount}) - 초특가 핫딜 | 배달/밀키트 쿠폰`;
+    document.title = pageTitle;
+
+    const metaDesc = document.querySelector('meta[name="description"]');
+    const descContent = `${title} ${item.discount} 할인! ${item.linkNote || '실시간 최저가 쿠폰 및 밀키트 특가 정보'}`;
+    if (metaDesc) {
+      metaDesc.setAttribute('content', descContent);
+    }
+
+    const updateOgTag = (property: string, content: string) => {
+      let el = document.querySelector(`meta[property="${property}"]`);
+      if (!el) {
+        el = document.createElement('meta');
+        el.setAttribute('property', property);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('content', content);
+    };
+
+    updateOgTag('og:title', pageTitle);
+    updateOgTag('og:description', descContent);
+    if (item.imageUrl) {
+      updateOgTag('og:image', item.imageUrl);
+    }
+    updateOgTag('og:type', 'product');
+
+    return () => {
+      document.title = defaultTitle;
+    };
+  }, [title, item]);
 
   const handleCopy = () => {
     if (item.couponCode) {
@@ -109,9 +144,9 @@ export const DealDetailPage: React.FC<DealDetailPageProps> = ({
       <div className="p-4 space-y-4">
         {/* 1. Product Image / Hero Banner */}
         <div className="relative w-full h-56 sm:h-64 rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 shadow-sm group">
-          {item.imageUrl ? (
+          {imageUrl ? (
             <img
-              src={item.imageUrl}
+              src={imageUrl}
               alt={title}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               referrerPolicy="no-referrer"

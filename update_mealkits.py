@@ -213,14 +213,18 @@ def fetch_realtime_mealkit_deals():
 def main():
     mealkit_list = fetch_realtime_mealkit_deals()
     
-    # public 디렉토리에 mealkits.json 파일로 저장
-    os.makedirs("public", exist_ok=True)
+    # public 및 public/data 디렉토리에 mealkits.json 파일로 저장
+    os.makedirs("public/data", exist_ok=True)
     json_path = "public/mealkits.json"
+    data_json_path = "public/data/mealkits.json"
     
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(mealkit_list, f, ensure_ascii=False, indent=2)
+
+    with open(data_json_path, "w", encoding="utf-8") as f:
+        json.dump(mealkit_list, f, ensure_ascii=False, indent=2)
         
-    print(f"🎉 성공적으로 '{json_path}' 파일에 최신 밀키트 할인 데이터가 반영되었습니다!")
+    print(f"🎉 성공적으로 '{json_path}' 및 '{data_json_path}' 파일에 최신 밀키트 할인 데이터가 반영되었습니다!")
 
 if __name__ == "__main__":
     main()

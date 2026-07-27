@@ -368,10 +368,12 @@ def main():
     refined_data = process_with_gemini(raw_text)
     
     if refined_data:
-        os.makedirs("public", exist_ok=True)
+        os.makedirs("public/data", exist_ok=True)
         with open("public/discounts.json", "w", encoding="utf-8") as f:
             json.dump(refined_data, f, ensure_ascii=False, indent=2)
-        print(f"3. 성공! 총 {len(refined_data)}개 핫딜 항목이 public/discounts.json 에 업데이트되었습니다.")
+        with open("public/data/discounts.json", "w", encoding="utf-8") as f:
+            json.dump(refined_data, f, ensure_ascii=False, indent=2)
+        print(f"3. 성공! 총 {len(refined_data)}개 핫딜 항목이 public/discounts.json 및 public/data/discounts.json 에 업데이트되었습니다.")
 
         site_url = os.environ.get("VERCEL_SITE_URL", "https://vercel.app")
         generate_seo_files(site_url, refined_data)

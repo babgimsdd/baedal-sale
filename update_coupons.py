@@ -196,14 +196,18 @@ def fetch_realtime_coupons():
 def main():
     coupons_list = fetch_realtime_coupons()
     
-    # public 디렉토리에 coupons.json 저장
-    os.makedirs("public", exist_ok=True)
+    # public 및 public/data 디렉토리에 coupons.json 저장
+    os.makedirs("public/data", exist_ok=True)
     json_path = "public/coupons.json"
+    data_json_path = "public/data/coupons.json"
     
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(coupons_list, f, ensure_ascii=False, indent=2)
+
+    with open(data_json_path, "w", encoding="utf-8") as f:
+        json.dump(coupons_list, f, ensure_ascii=False, indent=2)
         
-    print(f"🎉 성공적으로 '{json_path}' 파일에 최신 배달/치킨 쿠폰 데이터가 반영되었습니다!")
+    print(f"🎉 성공적으로 '{json_path}' 및 '{data_json_path}' 파일에 최신 배달/치킨 쿠폰 데이터가 반영되었습니다!")
 
 if __name__ == "__main__":
     main()
